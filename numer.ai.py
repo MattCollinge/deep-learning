@@ -8,7 +8,7 @@ import tflearn, numpy as np
 import time
 from tflearn.data_utils import shuffle, to_categorical
 from tflearn.layers.core import input_data, dropout, fully_connected
-from tflearn.layers.conv import conv_2d, max_pool_2d
+from tflearn.layers.conv import conv_1d, max_pool_1d
 from tflearn.layers.estimator import regression
 from tflearn.data_preprocessing import DataPreprocessing
 from tflearn.data_augmentation import ImageAugmentation
@@ -35,23 +35,37 @@ data_prep.add_featurewise_stdnorm(std=0.291349126404)
 network = input_data(shape=[None, 21, 1], data_preprocessing=data_prep)
 
 # Step 1: Convolution
-#network = conv_1d(network, 64, 1, activation=activation_strat, weights_init=weight_init_strat)
-# network = max_pool_2d(network, 2)
 
-network = fully_connected(network, 762, activation=activation_strat, weights_init=weight_init_strat)
-network = dropout(network, 0.5)
-network = fully_connected(network, 1024, activation=activation_strat, weights_init=weight_init_strat)
-network = dropout(network, 0.5)
-network = fully_connected(network, 2048, activation=activation_strat, weights_init=weight_init_strat)
-network = dropout(network, 0.5)
+network = conv_1d(network, 128, 16, activation=activation_strat, weights_init=weight_init_strat)
+network = max_pool_1d(network, 2)
+network = conv_1d(network, 256, 11, activation=activation_strat, weights_init=weight_init_strat)
+network = conv_1d(network, 512, 9, activation=activation_strat, weights_init=weight_init_strat)
+
+#network = conv_1d(network, 512, 9, activation=activation_strat, weights_init=weight_init_strat)
+#network = conv_1d(network, 512, 9, activation=activation_strat, weights_init=weight_init_strat)
+
+network = conv_1d(network, 384, 6, activation=activation_strat, weights_init=weight_init_strat)
+network = max_pool_1d(network, 2)
+network = conv_1d(network, 64, 3, activation=activation_strat, weights_init=weight_init_strat)
+
+#fully connected layers
+#network = fully_connected(network, 762, activation=activation_strat, weights_init=weight_init_strat)
+#network = dropout(network, 0.5)
+#network = fully_connected(network, 1024, activation=activation_strat, weights_init=weight_init_strat)
+#network = dropout(network, 0.5)
+#network = fully_connected(network, 2048, activation=activation_strat, weights_init=weight_init_strat)
+#network = dropout(network, 0.5)
+#network = fully_connected(network, 4096, activation=activation_strat, weights_init=weight_init_strat)
+#network = dropout(network, 0.5)
+#network = fully_connected(network, 8192, activation=activation_strat, weights_init=weight_init_strat)
+#network = dropout(network, 0.5)
 network = fully_connected(network, 4096, activation=activation_strat, weights_init=weight_init_strat)
-network = dropout(network, 0.5)
-network = fully_connected(network, 8192, activation=activation_strat, weights_init=weight_init_strat)
-network = dropout(network, 0.5)
-network = fully_connected(network, 4096, activation=activation_strat, weights_init=weight_init_strat)
-network = dropout(network, 0.5)
-network = fully_connected(network, 1024, activation=activation_strat, weights_init=weight_init_strat)
+network = dropout(network, 0.4)
+#network = fully_connected(network, 4096, activation=activation_strat, weights_init=weight_init_strat)
+#network = dropout(network, 0.7)
+
 network = fully_connected(network, 512, activation=activation_strat, weights_init=weight_init_strat)
+network = dropout(network, 0.5)
 
 # Step 8: Fully-connected neural network with two outputs (0=isn't a bird, 1=is a bird) to make the final prediction
 network = fully_connected(network, 2, activation='softmax', restore=True, weights_init=weight_init_strat)
@@ -59,7 +73,7 @@ network = fully_connected(network, 2, activation='softmax', restore=True, weight
 # Tell tflearn how we want to train the network
 network = regression(network, optimizer='adam',
                      loss='categorical_crossentropy',
-                     learning_rate=0.0017)
+                     learning_rate=0.002)
 
 # Wrap the network in a model object
 model = tflearn.DNN(network, tensorboard_verbose=0)
@@ -67,7 +81,7 @@ model = tflearn.DNN(network, tensorboard_verbose=0)
                     # checkpoint_path='/home/dev/data-science/next-interval-classifier.checkpoints/next-interval-classifier-50k-grey-closeonly.tfl.ckpt')
 
 # Train it! We'll do 100 training passes and monitor it as it goes.
-model.fit(X, Y, n_epoch=15, shuffle=True, validation_set=validationPC,
+model.fit(X, Y, n_epoch=25, shuffle=True, validation_set=validationPC,
           show_metric=True, batch_size=2000,
         #   snapshot_epoch=True,
           run_id=run_id)
