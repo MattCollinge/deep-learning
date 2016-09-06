@@ -11,14 +11,16 @@ from tflearn.layers.core import input_data, dropout, fully_connected
 from tflearn.layers.conv import conv_1d, max_pool_1d
 from tflearn.layers.estimator import regression
 from tflearn.data_preprocessing import DataPreprocessing
-from tflearn.data_augmentation import ImageAugmentation
+from tflearn.optimizers import SGD, Adam
 import pickle
 
 # Load path/class_id image file:
 dataBasePath = '/home/dev/data/numer.ai/'
-run_id = 'numerai-2016-09-04-' + str(time.time())
+run_id = 'numerai-cnn-2016-09-04-' + str(time.time())
 weight_init_strat = 'xavier'
 activation_strat = 'relu'
+batch_size = 2000
+epochs = 50
 
 X = np.load(dataBasePath + 'features-2016-09-04.npy')
 Y = np.load(dataBasePath + 'labels-2016-09-04.npy')
@@ -41,7 +43,7 @@ network = max_pool_1d(network, 2)
 network = conv_1d(network, 256, 11, activation=activation_strat, weights_init=weight_init_strat)
 network = conv_1d(network, 512, 9, activation=activation_strat, weights_init=weight_init_strat)
 
-#network = conv_1d(network, 512, 9, activation=activation_strat, weights_init=weight_init_strat)
+network = conv_1d(network, 512, 9, activation=activation_strat, weights_init=weight_init_strat)
 #network = conv_1d(network, 512, 9, activation=activation_strat, weights_init=weight_init_strat)
 
 network = conv_1d(network, 384, 6, activation=activation_strat, weights_init=weight_init_strat)
@@ -60,20 +62,21 @@ network = conv_1d(network, 64, 3, activation=activation_strat, weights_init=weig
 #network = fully_connected(network, 8192, activation=activation_strat, weights_init=weight_init_strat)
 #network = dropout(network, 0.5)
 network = fully_connected(network, 4096, activation=activation_strat, weights_init=weight_init_strat)
-network = dropout(network, 0.4)
+network = dropout(network, 0.3) #0.4 and 0.5 later is best
 #network = fully_connected(network, 4096, activation=activation_strat, weights_init=weight_init_strat)
 #network = dropout(network, 0.7)
 
 network = fully_connected(network, 512, activation=activation_strat, weights_init=weight_init_strat)
-network = dropout(network, 0.5)
+network = dropout(network, 0.3) #0.3 for both looks promising
 
 # Step 8: Fully-connected neural network with two outputs (0=isn't a bird, 1=is a bird) to make the final prediction
 network = fully_connected(network, 2, activation='softmax', restore=True, weights_init=weight_init_strat)
 
+#sgd = SGD(learning_rate=0.5, lr_decay=0.96, decay_step=100)
+adam = Adam(learning_rate=1.5, epsilon=0.1,)
 # Tell tflearn how we want to train the network
-network = regression(network, optimizer='adam',
-                     loss='categorical_crossentropy',
-                     learning_rate=0.002)
+network = regression(network, optimizer=adam,
+                     loss='categorical_crossentropy')
 
 # Wrap the network in a model object
 model = tflearn.DNN(network, tensorboard_verbose=0)
@@ -81,8 +84,8 @@ model = tflearn.DNN(network, tensorboard_verbose=0)
                     # checkpoint_path='/home/dev/data-science/next-interval-classifier.checkpoints/next-interval-classifier-50k-grey-closeonly.tfl.ckpt')
 
 # Train it! We'll do 100 training passes and monitor it as it goes.
-model.fit(X, Y, n_epoch=25, shuffle=True, validation_set=validationPC,
-          show_metric=True, batch_size=2000,
+model.fit(X, Y, n_epoch=epochs, shuffle=True, validation_set=validationPC,
+          show_metric=True, batch_size=batch_size,
         #   snapshot_epoch=True,
           run_id=run_id)
 
