@@ -72,10 +72,10 @@ network = dropout(network, 0.3) #0.3 for both looks promising
 # Step 8: Fully-connected neural network with two outputs (0=isn't a bird, 1=is a bird) to make the final prediction
 network = fully_connected(network, 2, activation='softmax', restore=True, weights_init=weight_init_strat)
 
-#sgd = SGD(learning_rate=0.5, lr_decay=0.96, decay_step=100)
-adam = Adam(learning_rate=1.5, epsilon=0.1,)
+sgd = SGD(learning_rate=0.5, lr_decay=0.96, decay_step=100)
+# adam = Adam(learning_rate=1.5, epsilon=0.1,)
 # Tell tflearn how we want to train the network
-network = regression(network, optimizer=adam,
+network = regression(network, optimizer=sgd,
                      loss='categorical_crossentropy')
 
 # Wrap the network in a model object
