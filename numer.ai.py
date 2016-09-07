@@ -60,19 +60,19 @@ network = conv_1d(network, 64, 3, activation=activation_strat, weights_init=weig
 #network = fully_connected(network, 4096, activation=activation_strat, weights_init=weight_init_strat)
 #network = dropout(network, 0.5)
 #network = fully_connected(network, 8192, activation=activation_strat, weights_init=weight_init_strat)
-#network = dropout(network, 0.5)
+network = dropout(network, 0.5)
 network = fully_connected(network, 4096, activation=activation_strat, weights_init=weight_init_strat)
-network = dropout(network, 0.3) #0.4 and 0.5 later is best
+network = dropout(network, 0.2) #0.4 and 0.5 later is best
 #network = fully_connected(network, 4096, activation=activation_strat, weights_init=weight_init_strat)
 #network = dropout(network, 0.7)
 
 network = fully_connected(network, 512, activation=activation_strat, weights_init=weight_init_strat)
-network = dropout(network, 0.3) #0.3 for both looks promising
+network = dropout(network, 0.2) #0.3 for both looks promising
 
 # Step 8: Fully-connected neural network with two outputs (0=isn't a bird, 1=is a bird) to make the final prediction
 network = fully_connected(network, 2, activation='softmax', restore=True, weights_init=weight_init_strat)
 
-sgd = SGD(learning_rate=0.5, lr_decay=0.96, decay_step=100)
+sgd = SGD(learning_rate=0.7, lr_decay=0.96, decay_step=100)
 # adam = Adam(learning_rate=1.5, epsilon=0.1,)
 # Tell tflearn how we want to train the network
 network = regression(network, optimizer=sgd,
