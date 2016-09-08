@@ -16,22 +16,23 @@ from tflearn.optimizers import SGD, Adam
 import pickle
 
 # Load path/class_id image file:
-dataBasePath = '/home/dev/data/numer.ai/'
-run_id = 'numerai-' + date.today().isoformat() + '-' + str(time.time())
+data_set_name = '2016-09-08'
+dataBasePath = '/home/dev/data/numer.ai/'+ data_set_name	+'/'
+run_id = 'numerai-' + data_set_name + '-'+ date.today().isoformat() + '-' + str(time.time())
 weight_init_strat = 'xavier'
 activation_strat = 'relu'
 batch_size = 2000
 epochs = 80
 
-X = np.load(dataBasePath + 'features-2016-09-04.npy')
-Y = np.load(dataBasePath + 'labels-2016-09-04.npy')
+X = np.load(dataBasePath + 'features-'+ data_set_name + '.npy')
+Y = np.load(dataBasePath + 'labels-'+ data_set_name + '.npy')
 
 Y = to_categorical(Y, 2)
 
 # Define our network architecture:
 data_prep = DataPreprocessing()
-data_prep.add_featurewise_zero_center(mean=0.499414771557)
-data_prep.add_featurewise_stdnorm(std=0.291349126404)
+data_prep.add_featurewise_zero_center(mean=0.499411645801) #mean=0.499414771557)
+data_prep.add_featurewise_stdnorm(std=0.291343533186) #std=0.291349126404)
 # X = tflearn.data_utils.featurewise_zero_center(X)
 # X = tflearn.data_utils.featurewise_std_normalization(X)
 
@@ -41,11 +42,14 @@ network = input_data(shape=[None, 21, 1], data_preprocessing=data_prep)
 
 network = conv_1d(network, 128, 16, activation=activation_strat, weights_init=weight_init_strat)
 network = max_pool_1d(network, 2)
-network = conv_1d(network, 256, 11, activation=activation_strat, weights_init=weight_init_strat)
-network = conv_1d(network, 512, 9, activation=activation_strat, weights_init=weight_init_strat)
 
-network = conv_1d(network, 512, 9, activation=activation_strat, weights_init=weight_init_strat)
-#network = conv_1d(network, 512, 9, activation=activation_strat, weights_init=weight_init_strat)
+network = conv_1d(network, 256, 11, activation=activation_strat, weights_init=weight_init_strat)
+
+network = conv_1d(network, 512, 11, activation=activation_strat, weights_init=weight_init_strat)
+network = conv_1d(network, 512, 11, activation=activation_strat, weights_init=weight_init_strat)
+network = conv_1d(network, 512, 11, activation=activation_strat, weights_init=weight_init_strat)
+
+network = max_pool_1d(network, 2)
 
 network = conv_1d(network, 384, 6, activation=activation_strat, weights_init=weight_init_strat)
 network = max_pool_1d(network, 2)
@@ -63,17 +67,17 @@ network = conv_1d(network, 64, 3, activation=activation_strat, weights_init=weig
 #network = fully_connected(network, 8192, activation=activation_strat, weights_init=weight_init_strat)
 # network = dropout(network, 0.1)
 network = fully_connected(network, 4096, activation=activation_strat, weights_init=weight_init_strat)
-network = dropout(network, 0.3) #0.4 and 0.5 later is best
+network = dropout(network, 0.2) #0.4 and 0.5 later is best
 #network = fully_connected(network, 4096, activation=activation_strat, weights_init=weight_init_strat)
 #network = dropout(network, 0.7)
 
 network = fully_connected(network, 512, activation=activation_strat, weights_init=weight_init_strat)
-network = dropout(network, 0.3) #0.3 for both looks promising
+network = dropout(network, 0.2) #0.3 for both looks promising
 
 # Step 8: Fully-connected neural network with two outputs (0=isn't a bird, 1=is a bird) to make the final prediction
 network = fully_connected(network, 2, activation='softmax', restore=True, weights_init=weight_init_strat)
 
-sgd = SGD(learning_rate=0.5, lr_decay=0.96, decay_step=100, staircase=False, )
+sgd = SGD(learning_rate=0.5, lr_decay=0.90, decay_step=100, staircase=False)
 # adam = Adam(learning_rate=1.5, epsilon=0.1,)
 # Tell tflearn how we want to train the network
 network = regression(network, optimizer=sgd,
@@ -91,5 +95,5 @@ model.fit(X, Y, n_epoch=epochs, shuffle=True, validation_set=validationPC,
           run_id=run_id)
 
 # Save model when training is complete to a file
-# model.save("next-interval-classifier-grey-50k-closeonly.tfl")
+model.save('numerai-' + data_set_name + '.tfl')
 # print("Network trained and saved as next-interval-classifier-grey-150k-closeonly.tfl!")
