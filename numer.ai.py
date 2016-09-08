@@ -22,7 +22,7 @@ run_id = 'numerai-' + data_set_name + '-'+ date.today().isoformat() + '-' + str(
 weight_init_strat = 'xavier'
 activation_strat = 'relu'
 batch_size = 2000
-epochs = 80
+epochs = 160
 
 X = np.load(dataBasePath + 'features-'+ data_set_name + '.npy')
 Y = np.load(dataBasePath + 'labels-'+ data_set_name + '.npy')
@@ -77,7 +77,7 @@ network = dropout(network, 0.2) #0.3 for both looks promising
 # Step 8: Fully-connected neural network with two outputs (0=isn't a bird, 1=is a bird) to make the final prediction
 network = fully_connected(network, 2, activation='softmax', restore=True, weights_init=weight_init_strat)
 
-sgd = SGD(learning_rate=0.5, lr_decay=0.90, decay_step=100, staircase=False)
+sgd = SGD(learning_rate=1.5, lr_decay=0.90, decay_step=100, staircase=False)
 # adam = Adam(learning_rate=1.5, epsilon=0.1,)
 # Tell tflearn how we want to train the network
 network = regression(network, optimizer=sgd,
