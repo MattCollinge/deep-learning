@@ -1,5 +1,6 @@
 notebooks/.ipynb_checkpoints
 *.png
 *.tfl*
+*.csv
 nohup.out
 checkpoint

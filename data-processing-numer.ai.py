@@ -12,13 +12,16 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 plt.close('all')
 
-dataBasePath = '/home/dev/data/numer.ai/2016-09-08/'
+data_set_name = '2016-09-08'
+dataBasePath = '/home/dev/data/numer.ai/' + data_set_name + '/'
 csvfilename = dataBasePath + 'numerai_training_data.csv'
+tournamentcsvfilename = dataBasePath + 'numerai_tournament_data.csv'
 
 # data = np.loadtxt(csvfilename, skiprows=1, usecols=range(0, 22), delimiter=',', dtype='f8')
 # df = pd.DataFrame(data)
 df = pd.read_csv(csvfilename)
-maxrows = 150000
+dft = pd.read_csv(tournamentcsvfilename)
+# maxrows = 150000
 
 #print(df.head())
 def summaryInfo(data):
@@ -34,20 +37,34 @@ def summaryInfo(data):
 
 features = df.values[:,0:21]
 labels = df.values[:,21]
+tournament = dft.values[:,1:22]
+tournament_ids = pd.DataFrame(dft.values[:,0],dtype=int).values
 
 print(features[0])
 print(labels[0])
+print(tournament[0])
+print(tournament_ids[0])
 
-print(np.shape(features))
+print('features:', np.shape(features))
+print('labels:',np.shape(labels))
+print('tournament:', np.shape(tournament))
+print('tournament_ids:',np.shape(tournament_ids))
 
 features = np.reshape(features, [-1, 21, 1])
+tournament = np.reshape(tournament, [-1, 21, 1])
 
 print(np.shape(features))
 
-np.save(dataBasePath + 'features-2016-09-08.npy', features)
+np.save(dataBasePath + 'features-' + data_set_name + '.npy', features)
+np.save(dataBasePath + 'labels-' + data_set_name + '.npy', labels)
+np.save(dataBasePath + 'tournament-' + data_set_name + '.npy', tournament)
+np.save(dataBasePath + 'tournament_ids-' + data_set_name + '.npy', tournament_ids)
 
 std = np.std(features, dtype=np.float64)
 mean = np.mean(features, dtype=np.float64)
 print ('features: Std=' + str(std), 'Mean=' + str(mean))
 
-np.save(dataBasePath + 'labels-2016-09-08.npy', labels)
+std = np.std(tournament, dtype=np.float64)
+mean = np.mean(tournament, dtype=np.float64)
+print ('tournament: Std=' + str(std), 'Mean=' + str(mean))
+
