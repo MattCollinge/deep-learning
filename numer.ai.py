@@ -22,7 +22,7 @@ run_id = 'numerai-' + data_set_name + '-'+ date.today().isoformat() + '-' + str(
 weight_init_strat = 'xavier'
 activation_strat = 'relu'
 batch_size = 2000
-epochs = 160
+epochs = 120
 
 X = np.load(dataBasePath + 'features-'+ data_set_name + '.npy')
 Y = np.load(dataBasePath + 'labels-'+ data_set_name + '.npy')
@@ -77,7 +77,7 @@ network = dropout(network, 0.2) #0.3 for both looks promising
 # Step 8: Fully-connected neural network with two outputs (0=isn't a bird, 1=is a bird) to make the final prediction
 network = fully_connected(network, 2, activation='softmax', restore=True, weights_init=weight_init_strat)
 
-sgd = SGD(learning_rate=1.5, lr_decay=0.90, decay_step=100, staircase=False)
+sgd = SGD(learning_rate=2.1, lr_decay=0.9, decay_step=100, staircase=False)
 # adam = Adam(learning_rate=1.5, epsilon=0.1,)
 # Tell tflearn how we want to train the network
 network = regression(network, optimizer=sgd,
@@ -97,3 +97,40 @@ model.fit(X, Y, n_epoch=epochs, shuffle=True, validation_set=validationPC,
 # Save model when training is complete to a file
 model.save('numerai-' + data_set_name + '.tfl')
 # print("Network trained and saved as next-interval-classifier-grey-150k-closeonly.tfl!")
+
+
+
+
+# from sklearn.metrics import classification_report
+# import tflearn, numpy as np
+# from tflearn.data_utils import shuffle, to_categorical
+# from tflearn.layers.core import input_data, dropout, fully_connected
+# from tflearn.layers.conv import conv_2d, max_pool_2d
+# from tflearn.layers.estimator import regression
+# from tflearn.data_preprocessing import ImagePreprocessing
+# from tflearn.layers.normalization import local_response_normalization
+
+# #Set up some variables for the Evaluation of the Models predicitve power...
+# newDatacsv = '/home/dev/data/EURUSD_Candlestick_5_m_BID_01.08.2016-19.08.2016.csv'
+# dataUnseenBasePath = '/home/dev/data/prep-5M-EURUSD-Unseen-2016-08-19/'
+
+# model.load(modelPath + 'next-interval-classifier-50k-grey-closeonly.tfl.ckpt-33675', weights_only=True)
+# Y = np.load(dataUnseenBasePath + 'labelsRaw.npy')
+# X = np.load(dataUnseenBasePath + 'raw.npy')
+# Y_eval = to_categorical(Y, 2)
+
+# print np.shape(X), np.shape(Y)
+# batchSize = 10
+# # Need to cycle round predicting each batch and appending it to an array for F1 scoring
+
+
+# # Feed new, unseen data to model and see how it performs...
+# predictOutput = np.array(model.predict(X))
+# #evaluateOutput = model.evaluate(X,Y_eval)
+# del model
+
+# print predictOutput
+# y_pred = np.around(predictOutput[:,0])
+# print y_pred
+# print(classification_report(Y, y_pred))
+
