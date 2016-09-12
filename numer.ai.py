@@ -9,7 +9,8 @@ import time
 from datetime import date
 from tflearn.data_utils import shuffle, to_categorical
 from tflearn.layers.core import input_data, dropout, fully_connected
-from tflearn.layers.conv import conv_1d, max_pool_1d
+from tflearn.layers.conv import conv_1d, max_pool_1d, avg_pool_1d
+from tflearn.layers.normalization import batch_normalization
 from tflearn.layers.estimator import regression
 from tflearn.data_preprocessing import DataPreprocessing
 from tflearn.optimizers import SGD, Adam
@@ -20,7 +21,7 @@ def load_data(data_set_name, data_set_type):
 
 def gen_run_id(data_set_name):
 	return 'numerai-' + data_set_name + '-'+ date.today().isoformat() + '-' + str(time.time())
-	
+
 def build_model():
 	weight_init_strat = 'xavier'
 	activation_strat = 'relu'
@@ -36,20 +37,29 @@ def build_model():
 
 	# Step 1: Convolution
 
-	network = conv_1d(network, 128, 16, activation=activation_strat, weights_init=weight_init_strat)
+	network = conv_1d(network, 1024, filter_size=12, strides=1, activation=activation_strat, weights_init=weight_init_strat)
+	# network = batch_normalization(network, beta=0.0, gamma=1.0, epsilon=1e-05, decay=0.9, stddev=0.002)
+	network = max_pool_1d(network, 2)
+	# network = batch_normalization(network, beta=0.0, gamma=1.0, epsilon=1e-05, decay=0.99, stddev=0.002)
+	network = conv_1d(network, 768,  filter_size=6, strides=1, activation=activation_strat, weights_init=weight_init_strat)
+	# network = batch_normalization(network, beta=0.0, gamma=1.0, epsilon=1e-05, decay=0.9, stddev=0.002)
 	network = max_pool_1d(network, 2)
 
-	network = conv_1d(network, 256, 11, activation=activation_strat, weights_init=weight_init_strat)
-
-	network = conv_1d(network, 512, 11, activation=activation_strat, weights_init=weight_init_strat)
-	network = conv_1d(network, 512, 11, activation=activation_strat, weights_init=weight_init_strat)
-	network = conv_1d(network, 512, 11, activation=activation_strat, weights_init=weight_init_strat)
+	network = conv_1d(network, 512, filter_size=3, strides=2, activation=activation_strat, weights_init=weight_init_strat)
+	# network = batch_normalization(network, beta=0.0, gamma=1.0, epsilon=1e-05, decay=0.9, stddev=0.002)
+	network = conv_1d(network, 512, filter_size=3, strides=2, activation=activation_strat, weights_init=weight_init_strat)
+	# network = batch_normalization(network, beta=0.0, gamma=1.0, epsilon=1e-05, decay=0.9, stddev=0.002)
+	network = conv_1d(network, 512, filter_size=3, strides=2, activation=activation_strat, weights_init=weight_init_strat)
+	# network = batch_normalization(network, beta=0.0, gamma=1.0, epsilon=1e-05, decay=0.9, stddev=0.002)
 
 	network = max_pool_1d(network, 2)
 
-	network = conv_1d(network, 384, 6, activation=activation_strat, weights_init=weight_init_strat)
-	network = max_pool_1d(network, 2)
-	network = conv_1d(network, 64, 3, activation=activation_strat, weights_init=weight_init_strat)
+	network = conv_1d(network, 384, filter_size=2, strides=1, activation=activation_strat, weights_init=weight_init_strat)
+	# network = batch_normalization(network, beta=0.0, gamma=1.0, epsilon=1e-05, decay=0.9, stddev=0.002)
+	# network = avg_pool_1d(network, 2)
+	network = conv_1d(network, 64, filter_size=2, strides=1, activation=activation_strat, weights_init=weight_init_strat)
+
+	# network = batch_normalization(network, beta=0.0, gamma=1.0, epsilon=1e-05, decay=0.9, stddev=0.002)
 	#network = max_pool_1d(network, 2)
 	#fully connected layers
 	#network = fully_connected(network, 762, activation=activation_strat, weights_init=weight_init_strat)
@@ -61,26 +71,30 @@ def build_model():
 	#network = fully_connected(network, 4096, activation=activation_strat, weights_init=weight_init_strat)
 	#network = dropout(network, 0.5)
 	#network = fully_connected(network, 8192, activation=activation_strat, weights_init=weight_init_strat)
-	# network = dropout(network, 0.1)
+	network = dropout(network, 0.8)
 	network = fully_connected(network, 4096, activation=activation_strat, weights_init=weight_init_strat)
-	network = dropout(network, 0.2) #0.4 and 0.5 later is best
+	# network = batch_normalization(network, beta=0.0, gamma=1.0, epsilon=1e-05, decay=0.99, stddev=0.002)
+
+	# network = dropout(network, 0.3) #0.4 and 0.5 later is best
 	#network = fully_connected(network, 4096, activation=activation_strat, weights_init=weight_init_strat)
-	#network = dropout(network, 0.7)
+	network = dropout(network, 0.8)
 
 	network = fully_connected(network, 512, activation=activation_strat, weights_init=weight_init_strat)
-	network = dropout(network, 0.2) #0.3 for both looks promising
+	# network = batch_normalization(network, beta=0.0, gamma=1.0, epsilon=1e-05, decay=0.9, stddev=0.002)
+
+	# network = dropout(network, 0.2) #0.3 for both looks promising
 
 	# Step 8: Fully-connected neural network with two outputs (0=isn't a bird, 1=is a bird) to make the final prediction
 	network = fully_connected(network, 2, activation='softmax', restore=True, weights_init=weight_init_strat)
 
-	sgd = SGD(learning_rate=0.5, lr_decay=0.92, decay_step=100, staircase=False)
+	sgd = SGD(learning_rate=0.5, lr_decay=0.98, decay_step=100, staircase=False)
 	# adam = Adam(learning_rate=1.5, epsilon=0.1,)
 	# Tell tflearn how we want to train the network
 	network = regression(network, optimizer=sgd,
 	                     loss='categorical_crossentropy')
 
 	# Wrap the network in a model object
-	model = tflearn.DNN(network, tensorboard_verbose=0)
+	model = tflearn.DNN(network, tensorboard_verbose=1)
 	return model
 	                    # ,max_checkpoints=15,
 	                    # checkpoint_path='/home/dev/data-science/next-interval-classifier.checkpoints/next-interval-classifier-50k-grey-closeonly.tfl.ckpt')
@@ -88,10 +102,10 @@ def train(model, data_set_name):
 	#Hyperparamters
 	validationPC = 0.1
 	batch_size = 2000
-	epochs = 160
+	epochs = 80
 
 	run_id = gen_run_id(data_set_name)
-	
+
 	X = load_data(data_set_name, 'features')
 	Y = load_data(data_set_name, 'labels')
 
@@ -109,9 +123,9 @@ def train(model, data_set_name):
 
 def predict(model, data_set_name):
 	print ('Predicting on: ', data_set_name)
-	from sklearn.metrics import classification_report	
-	model.load('numerai-' + data_set_name + '-best.tfl')#, weights_only=True)
-	
+	from sklearn.metrics import classification_report
+	model.load('numerai-' + data_set_name + '.tfl')#+ '-best.tfl')#, weights_only=True)
+
 	X = load_data(data_set_name, 'tournament')
 	ids = load_data(data_set_name,'tournament_ids')
 
@@ -126,7 +140,7 @@ def predict(model, data_set_name):
 		predictOutput = np.array(model.predict(X[x:x+batch_size]))
 		for p in xrange(0,len(predictOutput)):
 			predictions[x+p] = predictOutput[p,1]
-		
+
 		print(ids[x:x+1,0], predictions[x:x+1])
 
 	df = pd.DataFrame({'t_id': ids[:,0], 'probability': predictions})
@@ -159,8 +173,8 @@ def main(argv):
 		model_mode = 'train'
 		print ('Training on: ', data_set_name)
 		train(model, data_set_name)
-   	
-   
+
+
 if __name__ == "__main__":
    main(sys.argv[1:])
 
@@ -202,4 +216,3 @@ if __name__ == "__main__":
 # y_pred = np.around(predictOutput[:,0])
 # print y_pred
 # print(classification_report(Y, y_pred))
-
