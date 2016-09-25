@@ -168,8 +168,8 @@ def gen_filename(depth):
     return '/home/dev/data/numer.ai/autoenc-model-' + str(depth) + '.tfl'
 
 def make_new_autoencoder_graph(foundation, hidden_count):
-    encoder = tflearn.fully_connected(foundation, 256, restore=True)
-    encoder = tflearn.fully_connected(encoder, hidden_count, restore=True)
+    encoder = tflearn.fully_connected(foundation, 256, restore=True, name='encoder_h1_'+str(depth))
+    encoder = tflearn.fully_connected(encoder, hidden_count, restore=True, name='encoder_h2_'+str(depth))
 
     # Building the decoder
     decoder = tflearn.fully_connected(encoder, 256,  restore=False)
@@ -208,17 +208,24 @@ def predict_input(encoder, X, pretrain_session, depth):
     encoded = encoding_model.predict(X)
     return encoded
 
-def load_foundation(foundation_model, depth):
-    return foundation_model.load(gen_filename(depth))
+def load_foundation(foundation_graph, prior_model, depth):
+    # regreate graph to this point and assign trained weights for layers
+    # return graph to add new layers to
+    encoder_h1_vars = tflearn.variables.get_layer_variables_by_name('encoder_h1_'+ str(depth))
+    encoder_h2_vars = tflearn.variables.get_layer_variables_by_name('encoder_h2_'+ str(depth))
+    encoder, decoder = make_new_autoencoder_graph(input, 128, depth+1)
+    # return foundation_model.load(gen_filename(depth))
 
 # w = dnn.get_weights(denselayer.W) # get a dense layer weights
 # w = dnn.get_weights(convlayer.b)
+# dnn.setWeights(layer, Weightstoassign)
 
 depth = 1
 input = tflearn.input_data(shape=[None, 784])
 encoder, decoder = make_new_autoencoder_graph(input, 128)
 model = run_pretrain(encoder, decoder, X, testX, depth)
 encoded = predict_input(encoder, X, model.session, depth)
+
 
 depth = 2
 input = load_foundation(model, depth-1)

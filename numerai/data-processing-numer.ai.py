@@ -14,7 +14,7 @@ plt.close('all')
 
 validation_pc = 0.1
 test_pc = 0.1
-data_set_name = '2016-09-08'
+data_set_name = '2016-09-22'
 dataBasePath = '/home/dev/data/numer.ai/' + data_set_name + '/'
 csvfilename = dataBasePath + 'numerai_training_data.csv'
 tournamentcsvfilename = dataBasePath + 'numerai_tournament_data.csv'

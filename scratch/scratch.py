@@ -9,7 +9,7 @@ def logloss(act, pred):
     ll = ll * -1.0/len(act)
     return ll
 
-print(logloss([1,1,1,1], [1,1,1,0]))
+# print(logloss([1,1,1,1], [1,1,1,0]))
 
 
 def to_one_hot(dataY):
@@ -25,8 +25,8 @@ def to_one_hot(dataY):
         onehot[i][j] = 1
     return np.asarray(onehot)
 
-y = np.load('/home/dev/data/numer.ai/2016-09-08/labels-test-2016-09-08.npy')
-# print('One hot:', to_one_hot([0,1,2,4.5,1,2]))
-
-print(y)
-print('One hot:', to_one_hot(y))
+# y = np.load('/home/dev/data/numer.ai/2016-09-08/labels-test-2016-09-08.npy')
+# # print('One hot:', to_one_hot([0,1,2,4.5,1,2]))
+#
+# print(y)
+# print('One hot:', to_one_hot(y))
