@@ -1,7 +1,11 @@
+scratch/MNIST_data
+scratch/mnist
 notebooks/.ipynb_checkpoints
 *.png
 *.tfl*
 *.csv
+*.npy
+*.log
 nohup.out
 checkpoint
 .DS_Store

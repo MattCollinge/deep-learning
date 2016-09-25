@@ -1,0 +1,28 @@
+sudo -b LD_LIBRARY_PATH=/usr/local/nvidia/lib64/ nohup /usr/bin/python \
+scratch/dltf/run_stacked_autoencoder_unsupervised.py \
+--dataset custom \
+--train_dataset /home/dev/data/numer.ai/2016-09-08/features-train-2016-09-08.npy \
+--valid_dataset /home/dev/data/numer.ai/2016-09-08/features-valid-2016-09-08.npy \
+--dae_layers 128,15,256,128 \
+--dae_batch_size 25 \
+--dae_num_epochs 5 \
+--verbose 1 \
+--dae_corr_type masking \
+--dae_corr_frac 0.0 \
+--finetune_num_epochs 25 \
+--finetune_opt gradient_descent \
+--momentum 0.9 \
+--finetune_learning_rate 0.05 \
+--dae_enc_act_func sigmoid \
+--dae_dec_act_func sigmoid \
+--dae_loss_func cross_entropy \
+--finetune_act_func relu \
+--finetune_loss_func softmax_cross_entropy \
+--dropout 0.7 \
+--save_layers_output_test ./ </dev/null >../stacked-auto-encoder.log 2>&1
+
+--train_labels  /home/dev/data/numer.ai/2016-09-08/labels-train-2016-09-08.npy \
+--valid_labels /home/dev/data/numer.ai/2016-09-08/labels-valid-2016-09-08.npy \
+
+--test_dataset /home/dev/data/numer.ai/2016-09-08/tournament-2016-09-08.npy \
+--test_labels /home/dev/data/numer.ai/2016-09-08/tournament_ids-2016-09-08.npy \

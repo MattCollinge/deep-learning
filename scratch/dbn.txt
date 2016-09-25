@@ -1,0 +1,29 @@
+sudo -b LD_LIBRARY_PATH=/usr/local/nvidia/lib64/ nohup /usr/bin/python \
+scratch/dltf/run_dbn.py \
+--dataset custom \
+--train_dataset /home/dev/data/numer.ai/2016-09-08/features-train-2016-09-08.npy \
+--train_labels  /home/dev/data/numer.ai/2016-09-08/labels-train-2016-09-08.npy \
+--valid_dataset /home/dev/data/numer.ai/2016-09-08/features-valid-2016-09-08.npy \
+--valid_labels /home/dev/data/numer.ai/2016-09-08/labels-valid-2016-09-08.npy \
+--test_dataset /home/dev/data/numer.ai/2016-09-08/features-test-2016-09-08.npy \
+--test_labels /home/dev/data/numer.ai/2016-09-08/labels-test-2016-09-08.npy \
+--model_name dbn-2016-09-18 \
+--momentum 0.99 \
+--seed 55555 \
+--verbose 1 \
+--rbm_layers 512 \
+--rbm_gauss_visible False \
+--rbm_stddev 0.1 \
+--rbm_learning_rate 0.005 \
+--rbm_num_epochs 60 \
+--rbm_batch_size 100 \
+--rbm_gibbs_k 1 \
+--finetune_act_func relu \
+--finetune_learning_rate 0.05 \
+--finetune_momentum 0.7 \
+--finetune_num_epochs 20 \
+--finetune_batch_size 100 \
+--finetune_opt gradient_descent \
+--finetune_loss_func softmax_cross_entropy \
+--finetune_dropout 0.9 \
+--main_dir /tmp/tflearn_logs </dev/null >../stacked-dbn.log 2>&1
