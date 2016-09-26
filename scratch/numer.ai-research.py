@@ -231,7 +231,7 @@ plt.savefig('X_2d.png')
 
 
 def get_tb_cb(modelName):
-    return TensorBoard(log_dir='/tmp/tflearn_logs/keras-' + modelName + '-' + date.today().isoformat() + '-' + str(time.time()), histogram_freq=10, write_graph=True, write_images=False)
+    return TensorBoard(log_dir='/tmp/tflearn_logs/keras-' + modelName + '-' + date.today().isoformat() + '-' + str(time.time()), histogram_freq=0, write_graph=True, write_images=False)
 
 
 # Build encoder and decoder
@@ -240,11 +240,11 @@ input_dim = X_train.shape[1]
 
 inputs = Input(shape=(input_dim,))
 
-x = Dense(10, activation='relu', name='encoder_0_L_1')(inputs)
-x = Dense(32, activation='relu', name='encoder_0_L_2')(x)
+x = Dense(256, activation='relu', name='encoder_0_L_1')(inputs)
+x = Dense(128, activation='relu', name='encoder_0_L_2')(x)
 encoded = Dense(encoding_dim, activation='relu', name='encoder_0_L_3_encode')(x)
-x = Dense(32, activation='relu', name='decoder_0_L_1')(encoded)
-x = Dense(10, activation='relu', name='decoder_0_L_2')(x)
+x = Dense(128, activation='relu', name='decoder_0_L_1')(encoded)
+x = Dense(256, activation='relu', name='decoder_0_L_2')(x)
 decoded = Dense(X_train.shape[1], activation='relu', name='decoder_0_L_3_decode')(x)
 
 encoder_model = Model(input=inputs, output=encoded)
@@ -252,11 +252,11 @@ encoder_model = Model(input=inputs, output=encoded)
 autoencoder_model = Model(input=inputs, output=decoded)
 
 encoded_input = Input(shape=(encoding_dim,))
-decoder_layer = autoencoder_model.layers[-1]
-decoder_model = Model(input=encoded_input, output=decoder_layer(encoded_input))
+# decoder_layer = autoencoder_model.layers[-1]
+# decoder_model = Model(input=encoded_input, output=decoded)
 
 autoencoder_model.compile(loss='mse', optimizer='rmsprop')
-autoencoder_model.fit(X_train, X_train, nb_epoch=100, verbose=2, callbacks=[get_tb_cb('vanilla_encoder')]) #, validation_data=(X_test, X_test)
+autoencoder_model.fit(X_train, X_train, validation_data=(X_test, X_test), nb_epoch=100, verbose=2, callbacks=[get_tb_cb('vanilla_encoder')]) #, validation_data=(X_test, X_test)
 
 yaml_string = encoder_model.to_yaml()
 
@@ -275,24 +275,27 @@ plt.savefig('vanilla_encoder_train_diff.png')
 plot_differences(autoencoder_model.predict(X_test), X_test)
 plt.savefig('vanilla_encoder_test_diff.png')
 
-chk = ModelCheckpoint('vanilla_autoencoder', monitor='val_loss', verbose=1, save_best_only=True, save_weights_only=False, mode='auto')
+chk = ModelCheckpoint(dataBasePath + data_set_name + '/vanilla_autoencoder.ckpt', monitor='val_loss', verbose=1, save_best_only=True, save_weights_only=False, mode='auto')
 
 encoded.trainable = False
 
 print('input_dim:', input_dim)
-input2 = Input(shape=(input_dim,))
 
+# input2 = Input(shape=(input_dim,))
 # x = Dense(10, activation='relu', name='ft_encoder_0_L_1', weights=encoder_model.layers[1].get_weights())(input2)
 # x = Dense(32, activation='relu', name='ft_encoder_0_L_2', weights=encoder_model.layers[2].get_weights())(x)
-# encoded = Dense(encoding_dim, activation='relu', name='ft_encoder_0_L_3_encode', weights=encoder_model.layers[3].get_weights())(x)
+# x = Dense(encoding_dim, activation='relu', name='ft_encoder_0_L_3_encode', weights=encoder_model.layers[3].get_weights())(x)
 x = Dense(512, activation='relu', name='mlp_0_L_1')(encoded)
+x = Dropout(0.3)(x)
 x = Dense(1024, activation='relu', name='mlp_0_L_2')(x)
+x = Dropout(0.3)(x)
 x = Dense(256, activation='relu', name='mlp_0_L_3')(x)
+x = Dropout(0.3)(x)
 out = Dense(2, activation='softmax' )(x)
-sgd = SGD(lr=0.1)
+sgd = SGD(lr=0.01)
 finetune_model = Model(input=inputs, output=out)
 finetune_model.compile(loss='categorical_crossentropy', optimizer=sgd)
-finetune_model.fit(X_train, Y_train_OH, validation_split=0.1, nb_epoch=100, verbose=2)#, callbacks=[get_tb_cb('vanilla_ae_finetune')])
+finetune_model.fit(X_train, Y_train_OH, validation_data=(X_test, Y_test_OH), nb_epoch=100, verbose=2, callbacks=[chk, get_tb_cb('vanilla_ae_finetune')])
 # , validation_data=(X_test, Y_test_OH)
 # model = Sequential()
 # model.add(Dense(500, activation='relu', input_shape=(X_train.shape[1],)))
