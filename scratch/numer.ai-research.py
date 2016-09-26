@@ -235,7 +235,7 @@ def get_tb_cb(modelName):
 
 
 # Build encoder and decoder
-encoding_dim = 10
+encoding_dim = 5
 input_dim = X_train.shape[1]
 
 inputs = Input(shape=(input_dim,))
