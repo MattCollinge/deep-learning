@@ -237,24 +237,25 @@ def get_tb_cb(modelName):
     return TensorBoard(log_dir='/tmp/tflearn_logs/' + run_name, histogram_freq=0, write_graph=True, write_images=False)
 
 
-vae_batch_size = 1000
+vae_batch_size = 4000
 original_dim = X_train.shape[1]
 latent_dim = 40
-intermediate_dim = 500
-nb_epoch = 100
+intermediate_dim = 1000
+nb_epoch = 300
 epsilon_std = 0.01
 
 
 
 def vae(x, finetune, trainable):
 
-    num_layers = 3   
+    num_layers = 2  
     trained_layers = x
 
     def create_vae(start_layer, latent_dim, intermediate_dim, x_shape, name_suffix, trainable):
         h = Dense(intermediate_dim, activation='relu', name='encoder_{0}_L_1'.format(name_suffix), trainable=trainable)(start_layer)
         z_mean = Dense(latent_dim, name='encoder_{0}_L_2_encode'.format(name_suffix), trainable=trainable)(h)
         z_log_var = Dense(latent_dim, name='encoder_{0}_L_3'.format(name_suffix), trainable=trainable)(h)
+
 
         def sampling(args):
             z_mean, z_log_var = args
@@ -280,19 +281,22 @@ def vae(x, finetune, trainable):
         return x_decoded_mean, z_mean, vae_loss
 
 
-    for ae in range(num_layers):
-        vae_name = 'vae_{0}'.format(ae)
+    for vae in range(num_layers):
+        vae_name = 'vae_{0}'.format(vae)
+
         x_decoded_mean, z_mean, vae_loss = create_vae(trained_layers, latent_dim, intermediate_dim, input_dim, vae_name, trainable) #- (num_layers * 10)
         
         encoder_model = Model(input=x, output=z_mean)
         vae_model = Model(input=x, output=x_decoded_mean)
         
-        trained_layers = z_mean
         weights_file = dataBasePath + data_set_name + '/vae_' + vae_name + '_weights.keras'
             
         if(finetune==False):
             rms = RMSprop(lr=0.0001, rho=0.9, epsilon=1e-08, decay=0.0)
             vae_model.compile(optimizer=rms, loss=vae_loss)
+            
+            vae_model.load_weights(weights_file, by_name=True)
+
             vae_model.fit(X_train, X_train,
                 shuffle=True,
                 nb_epoch=nb_epoch,
@@ -310,6 +314,15 @@ def vae(x, finetune, trainable):
 
             encoder_model.save_weights(weights_file)
 
+            x_decoded_mean, z_mean, vae_loss = create_vae(trained_layers, latent_dim, intermediate_dim, input_dim, vae_name, False) #- (num_layers * 10)
+        
+            encoder_model = Model(input=x, output=z_mean)
+            vae_model = Model(input=x, output=x_decoded_mean)
+            
+            vae_model.load_weights(weights_file, by_name=True)
+            encoder_model.load_weights(weights_file, by_name=True)
+
+            plt.close('all')
             plot_model(vae_model.predict(X_train), Y_train)
             plt.savefig('vae' + vae_name + '_train.png')
             plot_model(vae_model.predict(X_test), Y_test)
@@ -318,6 +331,8 @@ def vae(x, finetune, trainable):
             plt.savefig('vae_' + vae_name + 'train_diff.png')
             plot_differences(vae_model.predict(X_test), X_test)
             plt.savefig('vae_' + vae_name + 'test_diff.png')
+
+        trained_layers = z_mean
 
     return weights_file, z_mean
 
@@ -366,6 +381,8 @@ def auto_encoder(inputs, finetune, trainable):
 
             encoder_model.save_weights(weights_file)
 
+
+            plt.close('all')
             plot_model(autoencoder_model.predict(X_train), Y_train)
             plt.savefig('vanilla_encoder' + ae_name + '_train.png')
             plot_model(autoencoder_model.predict(X_test), Y_test)
