@@ -30,7 +30,7 @@ alg = 'svd'
 dataBasePath = '/home/dev/data/numer.ai/'
 data_set_name = '2016-09-08'
 batch_size = 8000
-only_finetune = False
+pretrain = True
 
 def save_data(dataset, data_set_name, data_set_type, dataBasePath):
     fullPath = dataBasePath + data_set_name + '/'
@@ -180,11 +180,15 @@ def tsne(P, activations):
 X_train = load_data(data_set_name, 'features-train', dataBasePath)
 Y_train = load_data(data_set_name, 'labels-train', dataBasePath)
 
+X_tourn = load_data(data_set_name, 'tournament', dataBasePath)
+X_tourn = np.reshape(X_train, (-1, 21))
+
 X_test = load_data(data_set_name, 'features-test', dataBasePath)
 Y_test = load_data(data_set_name, 'labels-test', dataBasePath)
 
 X_val = load_data(data_set_name, 'features-valid', dataBasePath)
 Y_val = load_data(data_set_name, 'labels-valid', dataBasePath)
+
 
 from scratch import to_one_hot
 Y_train_OH = to_one_hot(Y_train)
@@ -193,6 +197,10 @@ Y_val_OH = to_one_hot(Y_val)
 
 print('X_train:', np.shape(X_train))
 print('Y_train:', np.shape(Y_train))
+print('X_tourn:', np.shape(X_tourn))
+X_Train_Unsup = np.concatenate((X_train, X_tourn), axis=0)
+
+print('X_Train_Unsup:', np.shape(X_Train_Unsup))
 print('Y_train_OH:', np.shape(Y_train_OH))
 print('X_test:', np.shape(X_test))
 print('Y_test:', np.shape(Y_test))
@@ -200,6 +208,8 @@ print('Y_test_OH:', np.shape(Y_test_OH))
 print('X_val:', np.shape(X_val))
 print('Y_val:', np.shape(Y_val))
 print('Y_val_OH:', np.shape(Y_val_OH))
+
+
 
 X = np.reshape(X_train, (-1, 21))
 Y = np.reshape(Y_train, (-1))
@@ -237,18 +247,148 @@ def get_tb_cb(modelName):
     return TensorBoard(log_dir='/tmp/tflearn_logs/' + run_name, histogram_freq=0, write_graph=True, write_images=False)
 
 
-vae_batch_size = 4000
-original_dim = X_train.shape[1]
-latent_dim = 40
+vae_batch_size = 5000
+latent_dim = 5
 intermediate_dim = 1000
-nb_epoch = 300
+nb_epoch = 10
 epsilon_std = 0.01
 
 
+def plot_outcomes(model, model_name, X_train, X_test, Y_train, Y_test):
+        plt.close('all')
+        plot_model(model.predict(X_train), Y_train)
+        plt.savefig(model_name + '_train.png')
+        plot_model(model.predict(X_test), Y_test)
+        plt.savefig(model_name + '_test.png')
 
-def vae(x, finetune, trainable):
+        plot_differences(model.predict(X_train), X_train)
+        plt.savefig(model_name + 'train_diff.png')
+        plot_differences(model.predict(X_test), X_test)
+        plt.savefig(model_name + 'test_diff.png')
 
-    num_layers = 2  
+
+chk = ModelCheckpoint(dataBasePath + data_set_name + '/ae_finetune.ckpt', monitor='val_loss', verbose=1, save_best_only=True, save_weights_only=False, mode='auto')
+
+
+def pretrain_vae(vae_model, encoder_model, vae_name, vae_loss, X_train, X_test, weights_file):
+    rms = RMSprop(lr=0.0001, rho=0.9, epsilon=1e-08, decay=0.0)
+    adam = keras.optimizers.Adam(lr=0.01, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0)
+    vae_model.compile(optimizer=adam, loss=vae_loss)
+
+    vae_model.fit(X_train, X_train,
+        shuffle=True,
+        nb_epoch=nb_epoch,
+        batch_size=vae_batch_size,
+        validation_data=(X_test, X_test),
+        callbacks=[get_tb_cb('vae_encoder_' + vae_name)])
+
+    encoder_model.save_weights(weights_file)
+
+    # plot_outcomes(vae_model, 'vae' + vae_name, X_train, X_test, Y_train, Y_test)
+    
+    next_X_train = encoder_model.predict(X_train, batch_size=vae_batch_size)
+    next_X_test = encoder_model.predict(X_test, batch_size=vae_batch_size)
+
+    return next_X_train, next_X_test
+
+
+def create_vae(start_layer, latent_dim, intermediate_dim, x_shape, name_suffix, trainable=True):
+        h = Dense(intermediate_dim, activation='relu', name='encoder_{0}_L_1'.format(name_suffix), trainable=trainable)(start_layer)
+        z_mean = Dense(latent_dim, name='encoder_{0}_L_2_encode'.format(name_suffix), trainable=trainable)(h)
+        z_log_var = Dense(latent_dim, name='encoder_{0}_L_3'.format(name_suffix), trainable=trainable)(h)
+        original_dim = x_shape
+
+        def sampling(args):
+            z_mean, z_log_var = args
+            epsilon = K.random_normal(K.shape(z_mean), mean=0., #shape=(vae_batch_size, latent_dim), mean=0.,
+                                  std=epsilon_std)
+            return z_mean + K.exp(z_log_var / 2) * epsilon
+
+
+        def kullback_leibler_divergence(y_true, y_pred):
+            y_true = K.clip(y_true, K.epsilon(), 1)
+            y_pred = K.clip(y_pred, K.epsilon(), 1)
+            return K.sum(y_true * K.log(y_true / y_pred), axis=-1)
+
+        def vae_loss(x, x_decoded_mean):
+            xent_loss = original_dim * objectives.binary_crossentropy(x, x_decoded_mean)
+            # z_mean_c = K.clip(z_mean, K.epsilon(), 1)
+            # z_log_var_c = K.clip(z_log_var, K.epsilon(), 1)
+            kl_loss = - 0.5 * K.sum(1 + z_log_var - K.square(z_mean) - K.exp(z_log_var), axis=-1)
+            return xent_loss + kl_loss
+
+
+        # note that "output_shape" isn't necessary with the TensorFlow backend
+        z = Lambda(sampling, output_shape=(latent_dim,))([z_mean, z_log_var])
+
+        # we instantiate these layers separately so as to reuse them later
+        decoder_h = Dense(intermediate_dim, activation='relu', name='decoder_{0}_L_1'.format(name_suffix))
+        decoder_mean = Dense(original_dim, activation='sigmoid', name='decoder_{0}_L_2'.format(name_suffix))
+        h_decoded = decoder_h(z)
+        x_decoded_mean = decoder_mean(h_decoded)
+        return x_decoded_mean, z_mean, vae_loss
+
+
+def train_model():
+    
+    num_layers = 3
+    pretrained_layers = []
+    pretrained_weights = {}
+    x_tst = X_test
+    x_trn = X_train
+    
+    for vae in range(num_layers):
+        vae_name = 'vae_{0}'.format(vae)
+        weights_file = dataBasePath + data_set_name + '/vae_' + vae_name + '_weights.keras'
+
+        input_dim = x_trn.shape[1]
+        print('input_dim:', input_dim, '. Full array:', np.shape(x_trn))
+
+        x = Input(shape=(input_dim,))
+
+        # Build one vae
+        x_decoded_mean, z_mean, vae_loss = create_vae(x, latent_dim, intermediate_dim, input_dim, vae_name, True) #- (num_layers * 10)
+
+        encoder_model = Model(input=x, output=z_mean)
+        vae_model = Model(input=x, output=x_decoded_mean)
+
+        # store layers in array
+        for l in encoder_model.layers[1:]:
+            pretrained_layers.append(l)
+
+        # train it
+        x_trn, x_tst = pretrain_vae(vae_model, encoder_model, vae_name, vae_loss, x_trn, x_tst, weights_file)
+
+        # store weights in dict by layer name
+        for l in encoder_model.layers[1:]:
+            pretrained_weights[l.name] = l.get_weights()
+
+    # rebuild model from layers
+    finetune_model = Sequential()
+    for l in pretrained_layers:
+        l.set_weights(pretrained_weights[l.name])
+        finetune_model.add(l)
+
+    out = Dense(2, activation='softmax')
+    finetune_model.add(out)
+
+    sgd = SGD(lr=0.1, decay=1e-15) #, nesterov=True )
+
+    print('Finetune_model.layers: ', finetune_model.layers)
+    print('Finetune_model.summary: ', finetune_model.summary())
+    print('Finetune_model.config: ', finetune_model.get_config())
+    finetune_model.load_weights(weights_file, by_name=True)
+
+    run_model = 'vae_ae_finetune' #'vanilla_ae_finetune' # 'vae_ae_finetune'
+
+    finetune_model.compile(loss='categorical_crossentropy', optimizer=sgd)
+    finetune_model.fit(X_train, Y_train_OH, validation_data=(X_test, Y_test_OH), batch_size=batch_size, nb_epoch=700, verbose=2, callbacks=[chk, get_tb_cb(run_model)])
+
+
+
+def vae(x, pretrain, trainable):
+
+    num_layers = 8
     trained_layers = x
 
     def create_vae(start_layer, latent_dim, intermediate_dim, x_shape, name_suffix, trainable):
@@ -285,19 +425,25 @@ def vae(x, finetune, trainable):
         vae_name = 'vae_{0}'.format(vae)
 
         x_decoded_mean, z_mean, vae_loss = create_vae(trained_layers, latent_dim, intermediate_dim, input_dim, vae_name, trainable) #- (num_layers * 10)
-        
+
         encoder_model = Model(input=x, output=z_mean)
         vae_model = Model(input=x, output=x_decoded_mean)
-        
+
         weights_file = dataBasePath + data_set_name + '/vae_' + vae_name + '_weights.keras'
-            
-        if(finetune==False):
+
+        if(pretrain==True):
             rms = RMSprop(lr=0.0001, rho=0.9, epsilon=1e-08, decay=0.0)
             vae_model.compile(optimizer=rms, loss=vae_loss)
-            
-            vae_model.load_weights(weights_file, by_name=True)
 
-            vae_model.fit(X_train, X_train,
+            # vae_model.load_weights(weights_file, by_name=True)
+
+            print('vae_model.summary: ', vae_model.summary())
+            print('vae_model.config: ', vae_model.get_config())
+
+            print('encoder_model.summary: ', encoder_model.summary())
+            print('encoder_model.config: ', vae_model.get_config())
+
+            vae_model.fit(X_Train_Unsup, X_Train_Unsup,
                 shuffle=True,
                 nb_epoch=nb_epoch,
                 batch_size=vae_batch_size,
@@ -314,23 +460,19 @@ def vae(x, finetune, trainable):
 
             encoder_model.save_weights(weights_file)
 
-            x_decoded_mean, z_mean, vae_loss = create_vae(trained_layers, latent_dim, intermediate_dim, input_dim, vae_name, False) #- (num_layers * 10)
-        
-            encoder_model = Model(input=x, output=z_mean)
-            vae_model = Model(input=x, output=x_decoded_mean)
-            
-            vae_model.load_weights(weights_file, by_name=True)
-            encoder_model.load_weights(weights_file, by_name=True)
+            for l in encoder_model.layers:
+                l.trainable = False
 
-            plt.close('all')
-            plot_model(vae_model.predict(X_train), Y_train)
-            plt.savefig('vae' + vae_name + '_train.png')
-            plot_model(vae_model.predict(X_test), Y_test)
-            plt.savefig('vae' + vae_name + '_test.png')
-            plot_differences(vae_model.predict(X_train), X_train)
-            plt.savefig('vae_' + vae_name + 'train_diff.png')
-            plot_differences(vae_model.predict(X_test), X_test)
-            plt.savefig('vae_' + vae_name + 'test_diff.png')
+            encoder_model.compile(optimizer=rms, loss=vae_loss)
+            # x_decoded_mean, z_mean, vae_loss = create_vae(trained_layers, latent_dim, intermediate_dim, input_dim, vae_name, False) #- (num_layers * 10)
+            #
+            # encoder_model = Model(input=x, output=z_mean)
+            # # vae_model = Model(input=x, output=x_decoded_mean)
+            #
+            # # vae_model.load_weights(weights_file, by_name=True)
+            # encoder_model.load_weights(weights_file, by_name=True)
+
+            plot_outcomes(vae_model, 'vae' + vae_name, X_train, X_test, Y_train, Y_test)
 
         trained_layers = z_mean
 
@@ -350,7 +492,7 @@ def create_auto_encoder(start_layer, encoding_dim, x_shape, name_suffix, trainab
     return encoded, decoded
 
 
-def auto_encoder(inputs, finetune, trainable):
+def auto_encoder(inputs, pretrain, trainable):
     # Build encoder and decoder
     encoding_dim = 100
     num_layers = 5
@@ -367,10 +509,10 @@ def auto_encoder(inputs, finetune, trainable):
         trained_layers = encoded
         weights_file = dataBasePath + data_set_name + '/vanilla_encoder' + ae_name + '_weights.keras'
 
-        if(finetune==False):
+        if(pretrain==True):
             autoencoder_model.compile(loss='mse', optimizer='rmsprop')
             autoencoder_model.fit(X_train, X_train, validation_data=(X_test, X_test), batch_size=batch_size, nb_epoch=100, verbose=2, callbacks=[get_tb_cb('vanilla_encoder_' + ae_name)]) #, validation_data=(X_test, X_test)
-            
+
             # trained_layers.trainable = False
 
             yaml_string = encoder_model.to_yaml()
@@ -381,62 +523,41 @@ def auto_encoder(inputs, finetune, trainable):
 
             encoder_model.save_weights(weights_file)
 
+            plot_outcomes(autoencoder_model, 'ae' + vae_name, X_test, X_train, Y_test, Y_train)
 
-            plt.close('all')
-            plot_model(autoencoder_model.predict(X_train), Y_train)
-            plt.savefig('vanilla_encoder' + ae_name + '_train.png')
-            plot_model(autoencoder_model.predict(X_test), Y_test)
-            plt.savefig('vanilla_encoder' + ae_name + '_test.png')
-            plot_differences(autoencoder_model.predict(X_train), X_train)
-            plt.savefig('vanilla_encoder_' + ae_name + 'train_diff.png')
-            plot_differences(autoencoder_model.predict(X_test), X_test)
-            plt.savefig('vanilla_encoder_' + ae_name + 'test_diff.png')
 
     return weights_file, encoded
 
 
-chk = ModelCheckpoint(dataBasePath + data_set_name + '/ae_finetune.ckpt', monitor='val_loss', verbose=1, save_best_only=True, save_weights_only=False, mode='auto')
+def run():
+    input_dim = X_train.shape[1]
+    print('input_dim:', input_dim)
+
+    inputs = Input(shape=(input_dim,))
+    trainable=True
+
+    weights_file, encoded =  vae(inputs, pretrain, trainable) #vae(inputs)  #auto_encoder(inputs)
 
 
+    # x = Dropout(0.5)(encoded)
+    out = Dense(2, activation='softmax' )(encoded)
+    sgd = SGD(lr=0.01, decay=1e-15) #, nesterov=True )
+    finetune_model = Model(input=inputs, output=out)
 
+    for l in finetune_model.layers:
+        l.trainable = True
 
+    if(pretrain==False):
+        print('Loading weights from: ', weights_file)
+        print('Finetune_model.layers: ', finetune_model.layers)
+        print('Finetune_model.summary: ', finetune_model.summary())
+        print('Finetune_model.config: ', finetune_model.get_config())
+        finetune_model.load_weights(weights_file, by_name=True)
 
-# input2 = Input(shape=(input_dim,))
-# x = Dense(10, activation='relu', name='ft_encoder_0_L_1', weights=encoder_model.layers[1].get_weights())(input2)
-# x = Dense(32, activation='relu', name='ft_encoder_0_L_2', weights=encoder_model.layers[2].get_weights())(x)
-# x = Dense(encoding_dim, activation='relu', name='ft_encoder_0_L_3_encode', weights=encoder_model.layers[3].get_weights())(x)
-# x = Dense(512, activation='relu', name='mlp_0_L_1')(encoded)
-# x = Dropout(0.6)(x)
-# x = Dense(1024, activation='relu', name='mlp_0_L_2')(x)
-# x = Dropout(0.6)(x)
-# x = Dense(256, activation='relu', name='mlp_0_L_3')(x)
+    run_model = 'vae_ae_finetune' #'vanilla_ae_finetune' # 'vae_ae_finetune'
 
-input_dim = X_train.shape[1]
-print('input_dim:', input_dim)
-
-inputs = Input(shape=(input_dim,))
-trainable=True
-
-weights_file, encoded =  vae(inputs, only_finetune, trainable) #vae(inputs)  #auto_encoder(inputs)
-
-
-# x = Dropout(0.5)(encoded)
-out = Dense(2, activation='softmax' )(encoded)
-sgd = SGD(lr=0.05, decay=1e-15) #, nesterov=True )
-finetune_model = Model(input=inputs, output=out)
-
-
-if(only_finetune==True):
-    print('Loading weights from: ', weights_file)
-    print('Finetune_model.layers: ', finetune_model.layers)
-    print('Finetune_model.summary: ', finetune_model.summary())
-    print('Finetune_model.config: ', finetune_model.get_config())
-    finetune_model.load_weights(weights_file, by_name=True)
-
-run_model = 'vae_ae_finetune' #'vanilla_ae_finetune' # 'vae_ae_finetune'
-
-finetune_model.compile(loss='categorical_crossentropy', optimizer=sgd)
-finetune_model.fit(X_train, Y_train_OH, validation_data=(X_test, Y_test_OH), batch_size=batch_size, nb_epoch=700, verbose=2, callbacks=[chk, get_tb_cb(run_model)])
+    finetune_model.compile(loss='categorical_crossentropy', optimizer=sgd)
+    finetune_model.fit(X_train, Y_train_OH, validation_data=(X_test, Y_test_OH), batch_size=batch_size, nb_epoch=700, verbose=2, callbacks=[chk, get_tb_cb(run_model)])
 
 # , validation_data=(X_test, Y_test_OH)
 # model = Sequential()
@@ -460,7 +581,7 @@ finetune_model.fit(X_train, Y_train_OH, validation_data=(X_test, Y_test_OH), bat
 # plot_model(model.predict(X_test), Y_test)
 # plt.savefig('tsne-ae-test.png')
 
-
+train_model()
 
 def old_stuff():
     encoder = Sequential()
