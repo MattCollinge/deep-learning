@@ -14,7 +14,7 @@ plt.close('all')
 
 validation_pc = 0.1
 test_pc = 0.1
-data_set_name = '2016-09-22'
+data_set_name = '2016-09-08'
 dataBasePath = '/home/dev/data/numer.ai/' + data_set_name + '/'
 csvfilename = dataBasePath + 'numerai_training_data.csv'
 tournamentcsvfilename = dataBasePath + 'numerai_tournament_data.csv'
@@ -59,12 +59,20 @@ labels_valid = df.values[test_count: (test_count + validation_count),21]
 features_train = df.values[(test_count + validation_count):, 0:21]
 labels_train = df.values[(test_count + validation_count):, 21]
 
+unsupervised_df = pd.concat([pd.DataFrame(features_train), pd.DataFrame(features_test), pd.DataFrame(tournament)])
 
+unsup_dataset_size = len(unsupervised_df.values)
+unsup_test_count = int(unsup_dataset_size * test_pc)
+
+unsup_features_test = unsupervised_df.values[0:unsup_test_count,0:21]
+unsup_features_train = unsupervised_df.values[unsup_test_count:,0:21]
 
 print(features[0])
 print(labels[0])
 print(tournament[0])
 print(tournament_ids[0])
+print(unsup_features_train[0])
+# print(unsupervised_df)
 
 print('features:', np.shape(features))
 print('labels:',np.shape(labels))
@@ -89,6 +97,9 @@ np.save(dataBasePath + 'labels-valid-' + data_set_name + '.npy', labels_valid)
 np.save(dataBasePath + 'features-test-' + data_set_name + '.npy', features_test)
 np.save(dataBasePath + 'labels-test-' + data_set_name + '.npy', labels_test)
 
+np.save(dataBasePath + 'unsup-features-train-' + data_set_name + '.npy', unsup_features_train)
+np.save(dataBasePath + 'unsup-features-test-' + data_set_name + '.npy', unsup_features_test)
+
 std = np.std(features, dtype=np.float64)
 mean = np.mean(features, dtype=np.float64)
 print ('features: Std=' + str(std), 'Mean=' + str(mean))
@@ -96,3 +107,15 @@ print ('features: Std=' + str(std), 'Mean=' + str(mean))
 std = np.std(tournament, dtype=np.float64)
 mean = np.mean(tournament, dtype=np.float64)
 print ('tournament: Std=' + str(std), 'Mean=' + str(mean))
+
+std = np.std(unsup_features_test, dtype=np.float64)
+mean = np.mean(unsup_features_test, dtype=np.float64)
+print ('unsupervised test: Std=' + str(std), 'Mean=' + str(mean))
+
+std = np.std(unsup_features_train, dtype=np.float64)
+mean = np.mean(unsup_features_train, dtype=np.float64)
+print ('unsupervised train: Std=' + str(std), 'Mean=' + str(mean))
+
+std = np.std(unsupervised_df.values, dtype=np.float64)
+mean = np.mean(unsupervised_df.values, dtype=np.float64)
+print ('unsupervised train: Std=' + str(std), 'Mean=' + str(mean))
