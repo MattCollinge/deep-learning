@@ -250,9 +250,9 @@ def get_tb_cb(modelName):
 
 
 vae_batch_size = 5000
-latent_dim = 5
-intermediate_dim = 500
-nb_epoch = 20
+latent_dim = 40
+intermediate_dim = 1000
+nb_epoch = 100
 epsilon_std = 0.01
 
 
@@ -310,6 +310,8 @@ def create_vae(start_layer, latent_dim, intermediate_dim, x_shape, name_suffix, 
             return K.sum(y_true * K.log(y_true / y_pred), axis=-1)
 
         def vae_loss(x, x_decoded_mean):
+            x = K.flatten(x)
+            x_decoded_mean = K.flatten(x_decoded_mean)
             xent_loss = original_dim * objectives.binary_crossentropy(x, x_decoded_mean)
             # z_mean_c = K.clip(z_mean, K.epsilon(), 1)
             # z_log_var_c = K.clip(z_log_var, K.epsilon(), 1)
@@ -330,7 +332,7 @@ def create_vae(start_layer, latent_dim, intermediate_dim, x_shape, name_suffix, 
 
 def train_vae_model():
     
-    num_layers = 6
+    num_layers = 2
     pretrained_layers = []
     pretrained_weights = {}
     x_tst = X_Test_Unsup #X_test
@@ -372,7 +374,9 @@ def train_vae_model():
         l.set_weights(pretrained_weights[l.name])
         finetune_model.add(l)
 
+    d = Dropout(0.5)
     out = Dense(2, activation='softmax')
+    # finetune_model.add(d)
     finetune_model.add(out)
 
     sgd = SGD(lr=0.1, decay=1e-15) #, nesterov=True )
@@ -395,7 +399,7 @@ def train_ae_model():
     x_tst = X_Test_Unsup #X_test
     x_trn = X_Train_Unsup #X_train
     
-    latent_dim = 3
+    latent_dim = 4
     ae_batch_size = batch_size
     
     for ae in range(num_layers):
@@ -646,8 +650,8 @@ def run():
 # plot_model(model.predict(X_test), Y_test)
 # plt.savefig('tsne-ae-test.png')
 
-train_ae_model()
-# train_vae_model()
+# train_ae_model()
+train_vae_model()
 
 def old_stuff():
     encoder = Sequential()
