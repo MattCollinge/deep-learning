@@ -290,10 +290,10 @@ def create_vae(start_layer, depth, latent_dim, intermediate_dim, x_shape, name_s
         
         h = Dense(intermediate_dim, activation='relu', name='encoder_{0}_L_1'.format(name_suffix), trainable=trainable)(start_layer)
         z_mean = Dense(latent_dim, name='encoder_{0}_L_2_encode'.format(name_suffix), trainable=trainable)(h)
-        # z_mean = BatchNormalization(mode=batch_sample_mode, name='encoder_{0}_L_z_mean_BatchNorm'.format(name_suffix))(z_mean)
+        z_mean = BatchNormalization(mode=batch_sample_mode, name='encoder_{0}_L_z_mean_BatchNorm'.format(name_suffix))(z_mean)
         
         z_log_var = Dense(latent_dim, name='encoder_{0}_L_3'.format(name_suffix), trainable=trainable)(h)
-        # z_log_var = BatchNormalization(mode=batch_sample_mode, name='encoder_{0}_L_z_log_var_BatchNorm'.format(name_suffix))(z_log_var)
+        z_log_var = BatchNormalization(mode=batch_sample_mode, name='encoder_{0}_L_z_log_var_BatchNorm'.format(name_suffix))(z_log_var)
         
         original_dim = x_shape
 
@@ -338,7 +338,7 @@ def train_vae_model():
     vae_batch_size = 5000
     latent_dim = 40
     intermediate_dim = 1000
-    nb_epoch = 10
+    nb_epoch = 100
 
 
     pretrained_layers = []
@@ -406,7 +406,10 @@ def train_vae_model():
         # finetune_model.add(l)
 
     finetune_model = pretrained_model
+    batch_sample_mode = 2
     d = Dropout(0.5)
+    # y = BatchNormalization(mode=batch_sample_mode)(y)
+        
     out = Dense(2, activation='softmax')(y)
     # finetune_model.add(d)
     # finetune_model.add(out)
