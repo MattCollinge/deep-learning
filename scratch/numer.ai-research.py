@@ -6,7 +6,7 @@ from keras import objectives
 from keras.models import Sequential, Model
 from keras.layers import Input, Dense, Dropout, Activation, Flatten, Lambda, BatchNormalization
 from keras.layers.convolutional import Convolution2D, MaxPooling2D
-from keras.optimizers import SGD, RMSprop, Adam
+from keras.optimizers import SGD, RMSprop, Adam, Nadam
 from keras.utils import np_utils
 from keras.objectives import categorical_crossentropy
 from keras.datasets import mnist
@@ -16,6 +16,7 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import time
 from datetime import date
+from sklearn import preprocessing
 
 matplotlib.use('Agg')
 # %matplotlib inline
@@ -213,11 +214,11 @@ print('Y_val_OH:', np.shape(Y_val_OH))
 
 
 
-X = np.reshape(X_train, (-1, 21))
-Y = np.reshape(Y_train, (-1))
+# X = np.reshape(X_Train_Unsup, (-1, 21))
+# Y = np.reshape(Y_train, (-1))
 # P = compute_joint_probabilities(X, batch_size=batch_size, verbose=2)
 # save_data(P, data_set_name, 'joint_P', dataBasePath)
-P = load_data(data_set_name, 'joint_P', dataBasePath)
+# P = load_data(data_set_name, 'joint_P', dataBasePath)
 
 # no_dims=2, perplexity=50, theta=0.5, randseed=-1, verbose=False,
 # initial_dims=50, use_pca=True, max_iter=1000,
@@ -228,19 +229,42 @@ P = load_data(data_set_name, 'joint_P', dataBasePath)
 
 # save_data(X_2d, data_set_name, 'X_2d', dataBasePath)
 from tsne import bh_sne
-# X_2d = bh_sne(X_train.astype(np.float64))
-# save_data(X_2d, data_set_name, 'X_2d_new', dataBasePath)
+# X_2d_trn = bh_sne(X_train.astype(np.float64))
+# X_2d_tst = bh_sne(X_test.astype(np.float64))
+# X_2d_u = bh_sne(X_Train_Unsup.astype(np.float64))
+# X_2d_u_tst = bh_sne(X_Test_Unsup.astype(np.float64))
 
-X_2d = load_data(data_set_name, 'X_2d_new', dataBasePath)
+# save_data(X_2d_trn, data_set_name, 'X_2d_trn', dataBasePath)
+# save_data(X_2d_tst, data_set_name, 'X_2d_tst', dataBasePath)
+# save_data(X_2d_u_trn, data_set_name, 'X_2d_u_trn', dataBasePath)
+# save_data(X_2d_u_tst, data_set_name, 'X_2d_u_tst', dataBasePath)
 
-print('x_2d shape:', np.shape(X_2d))
-# print('x_2d_old shape:', np.shape(X_2d_old))
+scaler = preprocessing.maxabs_scale #MinMaxScaler().fit_transform #maxabs_scale
 
-# from tsne import bh_sne
-# X_2d = bh_sne(X_train.astype(np.float64))
+X_2d_u_trn = scaler(load_data(data_set_name, 'X_2d_u_trn', dataBasePath))
+X_2d_u_tst = scaler(load_data(data_set_name, 'X_2d_u_tst', dataBasePath))
+X_2d_trn = scaler(load_data(data_set_name, 'X_2d_trn', dataBasePath))
+X_2d_tst = scaler(load_data(data_set_name, 'X_2d_tst', dataBasePath))
 
-plot_model(X_2d, Y_train)
-plt.savefig('X_2d.png')
+
+print('X_2d_u shape:', np.shape(X_2d_u_trn))
+print('X_2d_trn shape:', np.shape(X_2d_trn))
+print('X_2d_tst shape:', np.shape(X_2d_tst))
+
+# X_Train_Unsup = np.concatenate((X_Train_Unsup, X_2d_u_trn), axis=1)
+# X_Test_Unsup = np.concatenate((X_Test_Unsup, X_2d_u_tst), axis=1)
+# X_train = np.concatenate((X_train, X_2d_trn), axis=1)
+# X_test = np.concatenate((X_test, X_2d_tst), axis=1)
+
+print('X_train:', np.shape(X_train))
+print('X_Train_Unsup:', np.shape(X_Train_Unsup))
+print('X_test:', np.shape(X_test))
+
+plot_model(X_2d_trn, Y_train)
+plt.savefig('X_2d_trn.png')
+
+plot_model(X_2d_tst, Y_test)
+plt.savefig('X_2d_tst.png')
 
 
 def get_tb_cb(modelName):
@@ -281,6 +305,22 @@ def pretrain_ae(ae_model, encoder_model, nb_epoch, ae_name, ae_batch_size, X_tra
     next_X_train = encoder_model.predict(X_train, batch_size=ae_batch_size)
     next_X_test = encoder_model.predict(X_test, batch_size=ae_batch_size)
 
+    # abs_scalar = preprocessing.MaxAbsScaler().fit_transform
+
+    # x_tst = abs_scalar(next_X_test) # min_max_scaler.fit_transform(std_scaler.fit_transform(next_X_test))
+    # x_trn = abs_scalar(next_X_train) # min_max_scaler.fit_transform(std_scaler.fit_transform(next_X_train))
+
+    # std = np.std(x_tst, dtype=np.float64)
+    # mean = np.mean(x_tst, dtype=np.float64)
+
+    # print ('x_tst: Std=' + str(std), 'Mean=' + str(mean))
+
+
+    min_max_scaler = preprocessing.MinMaxScaler() #xStandardScaler()
+    # std_scaler = preprocessing.StandardScaler()
+    next_X_train = min_max_scaler.fit_transform(next_X_train)
+    next_X_test = min_max_scaler.fit_transform(next_X_test)
+
     return next_X_train, next_X_test
 
 
@@ -290,10 +330,10 @@ def create_vae(start_layer, depth, latent_dim, intermediate_dim, x_shape, name_s
         
         h = Dense(intermediate_dim, activation='relu', name='encoder_{0}_L_1'.format(name_suffix), trainable=trainable)(start_layer)
         z_mean = Dense(latent_dim, name='encoder_{0}_L_2_encode'.format(name_suffix), trainable=trainable)(h)
-        z_mean = BatchNormalization(mode=batch_sample_mode, name='encoder_{0}_L_z_mean_BatchNorm'.format(name_suffix))(z_mean)
+        # z_mean = BatchNormalization(mode=batch_sample_mode, name='encoder_{0}_L_z_mean_BatchNorm'.format(name_suffix))(z_mean)
         
         z_log_var = Dense(latent_dim, name='encoder_{0}_L_3'.format(name_suffix), trainable=trainable)(h)
-        z_log_var = BatchNormalization(mode=batch_sample_mode, name='encoder_{0}_L_z_log_var_BatchNorm'.format(name_suffix))(z_log_var)
+        # z_log_var = BatchNormalization(mode=batch_sample_mode, name='encoder_{0}_L_z_log_var_BatchNorm'.format(name_suffix))(z_log_var)
         
         original_dim = x_shape
 
@@ -336,9 +376,9 @@ def train_vae_model():
     
     num_layers = 3
     vae_batch_size = 5000
-    latent_dim = 40
+    latent_dim = 15
     intermediate_dim = 1000
-    nb_epoch = 100
+    nb_epoch = 150
 
 
     pretrained_layers = []
@@ -346,6 +386,11 @@ def train_vae_model():
     pretrained_weights = {}
     x_tst = X_Test_Unsup #X_test
     x_trn = X_Train_Unsup #X_train
+
+    rms = RMSprop(lr=0.0001, rho=0.9, epsilon=1e-08, decay=0.0)
+    adam = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0)
+    nadam = Nadam(lr=0.0001, beta_1=0.8, beta_2=0.999, epsilon=1e-08, schedule_decay=0.004)
+
     
     for vae in range(num_layers):
         vae_name = 'vae_{0}'.format(vae)
@@ -374,12 +419,14 @@ def train_vae_model():
 
         vae_layers.append(encoder_model)
 
-        rms = RMSprop(lr=0.0001, rho=0.9, epsilon=1e-08, decay=0.0)
-        adam = Adam(lr=0.01, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0)
-        vae_model.compile(optimizer=adam, loss=vae_loss)
+        vae_model.compile(optimizer=nadam, loss=vae_loss)
+
+        layer_epoch = nb_epoch
+        # if(vae != 0):
+        #     layer_epoch = 10
 
         # train it
-        x_trn, x_tst = pretrain_ae(vae_model, encoder_model, nb_epoch, 'vae_encoder_' + vae_name, vae_batch_size, x_trn, x_tst, weights_file)
+        x_trn, x_tst = pretrain_ae(vae_model, encoder_model, layer_epoch, 'vae_encoder_' + vae_name, vae_batch_size, x_trn, x_tst, weights_file)
 
         # store weights in dict by layer name
         for l in encoder_model.layers:
@@ -407,19 +454,20 @@ def train_vae_model():
 
     finetune_model = pretrained_model
     batch_sample_mode = 2
-    d = Dropout(0.5)
-    # y = BatchNormalization(mode=batch_sample_mode)(y)
+    #y = Dropout(0.5)(y)
+    y = BatchNormalization(mode=batch_sample_mode)(y)
         
     out = Dense(2, activation='softmax')(y)
     # finetune_model.add(d)
     # finetune_model.add(out)
     finetune_model = Model(input=x, output=out)
     
-    sgd = SGD(lr=0.1, decay=1e-15) #, nesterov=True )
+    sgd = SGD(lr=0.01, decay=1e-15) #, nesterov=True )
+    nadamft = Nadam(lr=0.002, beta_1=0.9, beta_2=0.999, epsilon=1e-08, schedule_decay=0.004)
 
-    print('Finetune_model.layers: ', finetune_model.layers)
+    # print('Finetune_model.layers: ', finetune_model.layers)
     print('Finetune_model.summary: ', finetune_model.summary())
-    print('Finetune_model.config: ', finetune_model.get_config())
+    # print('Finetune_model.config: ', finetune_model.get_config())
     # finetune_model.load_weights(weights_file, by_name=True)
 
     run_model = 'vae_ae_finetune' #'vanilla_ae_finetune' # 'vae_ae_finetune'
@@ -491,18 +539,28 @@ def train_ae_model():
 
 
 
-def vae(x, pretrain, trainable):
+def vae(x, input_dim, pretrain, trainable):
 
-    num_layers = 8
+    num_layers = 4
+    vae_batch_size = 5000
+    latent_dim = 500
+    intermediate_dim = 3000
+    nb_epoch = 20
+        
     trained_layers = x
 
     def create_vae(start_layer, latent_dim, intermediate_dim, x_shape, name_suffix, trainable):
+        batch_sample_mode = 2
+        # start_layer = BatchNormalization(mode=batch_sample_mode, name='encoder_{0}_L_start_BatchNorm'.format(name_suffix))(start_layer)
+        # init='he_normal',
         h = Dense(intermediate_dim, activation='relu', name='encoder_{0}_L_1'.format(name_suffix), trainable=trainable)(start_layer)
         z_mean = Dense(latent_dim, name='encoder_{0}_L_2_encode'.format(name_suffix), trainable=trainable)(h)
         z_log_var = Dense(latent_dim, name='encoder_{0}_L_3'.format(name_suffix), trainable=trainable)(h)
 
+        original_dim = x_shape
 
         def sampling(args):
+            epsilon_std = 0.01
             z_mean, z_log_var = args
             epsilon = K.random_normal(K.shape(z_mean), mean=0., #shape=(vae_batch_size, latent_dim), mean=0.,
                                   std=epsilon_std)
@@ -516,14 +574,14 @@ def vae(x, pretrain, trainable):
 
 
         # note that "output_shape" isn't necessary with the TensorFlow backend
-        z = Lambda(sampling, output_shape=(latent_dim,))([z_mean, z_log_var])
+        z = Lambda(sampling, output_shape=(latent_dim,), name='encoder_{0}_L_Lambda'.format(name_suffix))([z_mean, z_log_var])
 
         # we instantiate these layers separately so as to reuse them later
         decoder_h = Dense(intermediate_dim, activation='relu', name='decoder_{0}_L_1'.format(name_suffix))
         decoder_mean = Dense(original_dim, activation='sigmoid', name='decoder_{0}_L_2'.format(name_suffix))
         h_decoded = decoder_h(z)
         x_decoded_mean = decoder_mean(h_decoded)
-        return x_decoded_mean, z_mean, vae_loss
+        return x_decoded_mean, z, vae_loss
 
 
     for vae in range(num_layers):
@@ -538,12 +596,13 @@ def vae(x, pretrain, trainable):
 
         if(pretrain==True):
             rms = RMSprop(lr=0.0001, rho=0.9, epsilon=1e-08, decay=0.0)
-            vae_model.compile(optimizer=rms, loss=vae_loss)
+            nadam = Nadam(lr=0.0002, beta_1=0.9, beta_2=0.999, epsilon=1e-08, schedule_decay=0.004)
+            vae_model.compile(optimizer=nadam, loss=vae_loss)
 
             # vae_model.load_weights(weights_file, by_name=True)
 
             print('vae_model.summary: ', vae_model.summary())
-            print('vae_model.config: ', vae_model.get_config())
+            # print('vae_model.config: ', vae_model.get_config())
 
             print('encoder_model.summary: ', encoder_model.summary())
             print('encoder_model.config: ', vae_model.get_config())
@@ -552,7 +611,7 @@ def vae(x, pretrain, trainable):
                 shuffle=True,
                 nb_epoch=nb_epoch,
                 batch_size=vae_batch_size,
-                validation_data=(X_test, X_test),
+                validation_data=(X_Test_Unsup, X_Test_Unsup),
                 callbacks=[get_tb_cb('vae_encoder_' + vae_name)])
 
             # build some new layers and assign the trained weights but freeze them??
@@ -568,7 +627,7 @@ def vae(x, pretrain, trainable):
             for l in encoder_model.layers:
                 l.trainable = False
 
-            encoder_model.compile(optimizer=rms, loss=vae_loss)
+            encoder_model.compile(optimizer=nadam, loss=vae_loss)
             # x_decoded_mean, z_mean, vae_loss = create_vae(trained_layers, latent_dim, intermediate_dim, input_dim, vae_name, False) #- (num_layers * 10)
             #
             # encoder_model = Model(input=x, output=z_mean)
@@ -577,7 +636,7 @@ def vae(x, pretrain, trainable):
             # # vae_model.load_weights(weights_file, by_name=True)
             # encoder_model.load_weights(weights_file, by_name=True)
 
-            plot_outcomes(vae_model, 'vae' + vae_name, X_train, X_test, Y_train, Y_test)
+            # plot_outcomes(vae_model, 'vae' + vae_name, X_train, X_test, Y_train, Y_test)
 
         trained_layers = z_mean
 
@@ -637,16 +696,19 @@ def auto_encoder(inputs, pretrain, trainable):
 def run():
     input_dim = X_train.shape[1]
     print('input_dim:', input_dim)
+    batch_sample_mode = 2
 
     inputs = Input(shape=(input_dim,))
     trainable=True
 
-    weights_file, encoded =  vae(inputs, pretrain, trainable) #vae(inputs)  #auto_encoder(inputs)
+    weights_file, encoded =  vae(inputs, input_dim, pretrain, trainable) #vae(inputs)  #auto_encoder(inputs)
 
-
+    # encoded = BatchNormalization(mode=batch_sample_mode)(encoded)
     # x = Dropout(0.5)(encoded)
-    out = Dense(2, activation='softmax' )(encoded)
-    sgd = SGD(lr=0.01, decay=1e-15) #, nesterov=True )
+    out = Dense(2, activation='softmax')(encoded)
+    sgd = SGD(lr=0.01, decay=1e-15, nesterov=True )
+    nadamft = Nadam(lr=0.002, beta_1=0.9, beta_2=0.999, epsilon=1e-08, schedule_decay=0.004)
+
     finetune_model = Model(input=inputs, output=out)
 
     for l in finetune_model.layers:
@@ -658,6 +720,8 @@ def run():
         print('Finetune_model.summary: ', finetune_model.summary())
         print('Finetune_model.config: ', finetune_model.get_config())
         finetune_model.load_weights(weights_file, by_name=True)
+
+    print('Finetune_model.summary: ', finetune_model.summary())
 
     run_model = 'vae_ae_finetune' #'vanilla_ae_finetune' # 'vae_ae_finetune'
 
@@ -687,7 +751,8 @@ def run():
 # plt.savefig('tsne-ae-test.png')
 
 # train_ae_model()
-train_vae_model()
+# train_vae_model()
+run()
 
 def old_stuff():
     encoder = Sequential()
