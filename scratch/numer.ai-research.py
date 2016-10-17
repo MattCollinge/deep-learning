@@ -6,7 +6,7 @@ from keras import objectives
 from keras.models import Sequential, Model
 from keras.layers import Input, Dense, Dropout, Activation, Flatten, Lambda, BatchNormalization
 from keras.layers.convolutional import Convolution2D, MaxPooling2D
-from keras.optimizers import SGD, RMSprop, Adam, Nadam
+from keras.optimizers import SGD, RMSprop, Adam, Nadam, Adadelta
 from keras.utils import np_utils
 from keras.objectives import categorical_crossentropy
 from keras.datasets import mnist
@@ -290,7 +290,7 @@ chk = ModelCheckpoint(dataBasePath + data_set_name + '/ae_finetune.ckpt', monito
 
 
 def pretrain_ae(ae_model, encoder_model, nb_epoch, ae_name, ae_batch_size, X_train, X_test, weights_file):
-    
+
     ae_model.fit(X_train, X_train,
         shuffle=True,
         nb_epoch=nb_epoch,
@@ -301,7 +301,7 @@ def pretrain_ae(ae_model, encoder_model, nb_epoch, ae_name, ae_batch_size, X_tra
     encoder_model.save_weights(weights_file)
 
     # plot_outcomes(vae_model, 'vae' + vae_name, X_train, X_test, Y_train, Y_test)
-    
+
     next_X_train = encoder_model.predict(X_train, batch_size=ae_batch_size)
     next_X_test = encoder_model.predict(X_test, batch_size=ae_batch_size)
 
@@ -327,22 +327,23 @@ def pretrain_ae(ae_model, encoder_model, nb_epoch, ae_name, ae_batch_size, X_tra
 def create_vae(start_layer, depth, latent_dim, intermediate_dim, x_shape, name_suffix, trainable=True):
         batch_sample_mode = 2
         start_layer = BatchNormalization(mode=batch_sample_mode, name='encoder_{0}_L_start_BatchNorm'.format(name_suffix))(start_layer)
-        
+
         h = Dense(intermediate_dim, activation='relu', name='encoder_{0}_L_1'.format(name_suffix), trainable=trainable)(start_layer)
         z_mean = Dense(latent_dim, name='encoder_{0}_L_2_encode'.format(name_suffix), trainable=trainable)(h)
         # z_mean = BatchNormalization(mode=batch_sample_mode, name='encoder_{0}_L_z_mean_BatchNorm'.format(name_suffix))(z_mean)
-        
+
         z_log_var = Dense(latent_dim, name='encoder_{0}_L_3'.format(name_suffix), trainable=trainable)(h)
         # z_log_var = BatchNormalization(mode=batch_sample_mode, name='encoder_{0}_L_z_log_var_BatchNorm'.format(name_suffix))(z_log_var)
-        
+
         original_dim = x_shape
 
         def sampling(args):
-            epsilon_std = 0.01
+            epsilon_std = 0.001
             z_mean, z_log_var = args
-            epsilon = K.random_normal(K.shape(z_mean), mean=0., #shape=(vae_batch_size, latent_dim), mean=0.,
-                                  std=epsilon_std)
-            return z_mean + K.exp(z_log_var / 2) * epsilon
+            epsilon = K.random_normal(K.shape(z_mean), mean=0. #) #shape=(vae_batch_size, latent_dim), mean=0.,
+                                  ,std=epsilon_std)
+            #return z_mean + K.exp(z_log_var / 2) * epsilon
+            return z_mean + K.exp(z_log_var) * epsilon
 
 
         def kullback_leibler_divergence(y_true, y_pred):
@@ -363,17 +364,22 @@ def create_vae(start_layer, depth, latent_dim, intermediate_dim, x_shape, name_s
 
         # note that "output_shape" isn't necessary with the TensorFlow backend
         z = Lambda(sampling, output_shape=[latent_dim,], name='encoder_{0}_L_Lambda'.format(name_suffix))([z_mean, z_log_var])
-        
+
         # we instantiate these layers separately so as to reuse them later
         decoder_h = Dense(intermediate_dim, activation='relu', name='decoder_{0}_L_1'.format(name_suffix))
         decoder_mean = Dense(original_dim, activation='sigmoid', name='decoder_{0}_L_2'.format(name_suffix))
         h_decoded = decoder_h(z)
         x_decoded_mean = decoder_mean(h_decoded)
-        return x_decoded_mean, z, vae_loss
+
+        partial_sup = None
+        if depth==0:
+            partial_sup = Dense(2, activation='softmax', name='aux_out_{0}_L_1'.format(name_suffix))(x_decoded_mean)
+
+        return x_decoded_mean, z, vae_loss, partial_sup
 
 
 def train_vae_model():
-    
+
     num_layers = 3
     vae_batch_size = 5000
     latent_dim = 15
@@ -391,7 +397,7 @@ def train_vae_model():
     adam = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0)
     nadam = Nadam(lr=0.0001, beta_1=0.8, beta_2=0.999, epsilon=1e-08, schedule_decay=0.004)
 
-    
+
     for vae in range(num_layers):
         vae_name = 'vae_{0}'.format(vae)
         weights_file = dataBasePath + data_set_name + '/vae_' + vae_name + '_weights.keras'
@@ -410,9 +416,9 @@ def train_vae_model():
         # print('vae', vae_name, '.layers: ', encoder_model.layers)
         print('vae', vae_name, '.summary: ', encoder_model.summary())
         # print('vae', vae_name, '.config: ', encoder_model.get_config())
-    
+
         # config = encoder_model.get_config()
-        
+
         # store layers in array
         for l in encoder_model.layers[1:]:
             pretrained_layers.append(l)
@@ -435,18 +441,18 @@ def train_vae_model():
     # rebuild model from layers
     # finetune_model = Sequential()
     vae_name = 'vae_{0}'.format(0)
-    input_dim = X_train.shape[1] 
+    input_dim = X_train.shape[1]
     x = Input(shape=(input_dim,), name='input_{0}_L'.format(vae_name))
     # _, y, _ = create_vae(x, 0, latent_dim, intermediate_dim, input_dim, vae_name, True) #- (num_layers * 10)
     y = x
     for vae in range(num_layers):
        vae_name = 'vae_{0}'.format(vae)
        _, y, _ = create_vae(y, vae, latent_dim, intermediate_dim, input_dim, vae_name, True) #- (num_layers * 10)
-      
+
 
     pretrained_model = Model(input=x, output=y)
 
-     
+
     for l in pretrained_model.layers:
         print(l.name)
         l.set_weights(pretrained_weights[l.name])
@@ -456,12 +462,12 @@ def train_vae_model():
     batch_sample_mode = 2
     #y = Dropout(0.5)(y)
     y = BatchNormalization(mode=batch_sample_mode)(y)
-        
+
     out = Dense(2, activation='softmax')(y)
     # finetune_model.add(d)
     # finetune_model.add(out)
     finetune_model = Model(input=x, output=out)
-    
+
     sgd = SGD(lr=0.01, decay=1e-15) #, nesterov=True )
     nadamft = Nadam(lr=0.002, beta_1=0.9, beta_2=0.999, epsilon=1e-08, schedule_decay=0.004)
 
@@ -476,16 +482,16 @@ def train_vae_model():
     finetune_model.fit(X_train, Y_train_OH, validation_data=(X_test, Y_test_OH), batch_size=batch_size, nb_epoch=200, verbose=2, callbacks=[chk, get_tb_cb(run_model)])
 
 def train_ae_model():
-    
+
     num_layers = 2
     pretrained_layers = []
     pretrained_weights = {}
     x_tst = X_Test_Unsup #X_test
     x_trn = X_Train_Unsup #X_train
-    
+
     latent_dim = 4
     ae_batch_size = batch_size
-    
+
     for ae in range(num_layers):
         ae_name = 'ae_{0}'.format(ae)
         weights_file = dataBasePath + data_set_name + '/ae_' + ae_name + '_weights.keras'
@@ -541,15 +547,15 @@ def train_ae_model():
 
 def vae(x, input_dim, pretrain, trainable):
 
-    num_layers = 4
+    num_layers = 2
     vae_batch_size = 5000
-    latent_dim = 500
-    intermediate_dim = 3000
-    nb_epoch = 20
-        
+    latent_dim = 50
+    intermediate_dim = 4000
+    nb_epoch = 50
+
     trained_layers = x
 
-    def create_vae(start_layer, latent_dim, intermediate_dim, x_shape, name_suffix, trainable):
+    def fcreate_vae(start_layer, depth, latent_dim, intermediate_dim, x_shape, name_suffix, trainable):
         batch_sample_mode = 2
         # start_layer = BatchNormalization(mode=batch_sample_mode, name='encoder_{0}_L_start_BatchNorm'.format(name_suffix))(start_layer)
         # init='he_normal',
@@ -583,21 +589,41 @@ def vae(x, input_dim, pretrain, trainable):
         x_decoded_mean = decoder_mean(h_decoded)
         return x_decoded_mean, z, vae_loss
 
+     # partialy supervised the 1st AutoEncoder
 
     for vae in range(num_layers):
         vae_name = 'vae_{0}'.format(vae)
 
-        x_decoded_mean, z_mean, vae_loss = create_vae(trained_layers, latent_dim, intermediate_dim, input_dim, vae_name, trainable) #- (num_layers * 10)
+        x_decoded_mean, z_mean, vae_loss, aux_out = create_vae(trained_layers, vae, latent_dim, intermediate_dim, input_dim, vae_name, trainable) #- (num_layers * 10)
 
         encoder_model = Model(input=x, output=z_mean)
-        vae_model = Model(input=x, output=x_decoded_mean)
+
+        outputs = x_decoded_mean
+        loss = vae_loss
+        loss_weights=[1.]
+        vae_trainX = X_Train_Unsup
+        vae_trainY = X_Train_Unsup
+        vae_testX = X_Test_Unsup
+        vae_testY = X_Test_Unsup
+
+        if vae == 0: #NO OP for now...
+            outputs = [x_decoded_mean, aux_out]
+            loss = [vae_loss, 'categorical_crossentropy']
+            loss_weights=[0.5, 0.5]
+            vae_trainX = X_train
+            vae_trainY = [X_train, Y_train_OH]
+            vae_testX = X_test
+            vae_testY = [X_test, Y_test_OH]
+
+
+        vae_model = Model(input=x, output=outputs)
 
         weights_file = dataBasePath + data_set_name + '/vae_' + vae_name + '_weights.keras'
 
         if(pretrain==True):
             rms = RMSprop(lr=0.0001, rho=0.9, epsilon=1e-08, decay=0.0)
             nadam = Nadam(lr=0.0002, beta_1=0.9, beta_2=0.999, epsilon=1e-08, schedule_decay=0.004)
-            vae_model.compile(optimizer=nadam, loss=vae_loss)
+            vae_model.compile(optimizer=nadam, loss=loss, loss_weights=loss_weights)
 
             # vae_model.load_weights(weights_file, by_name=True)
 
@@ -607,11 +633,11 @@ def vae(x, input_dim, pretrain, trainable):
             print('encoder_model.summary: ', encoder_model.summary())
             print('encoder_model.config: ', vae_model.get_config())
 
-            vae_model.fit(X_Train_Unsup, X_Train_Unsup,
+            vae_model.fit(vae_trainX, vae_trainY,
                 shuffle=True,
                 nb_epoch=nb_epoch,
                 batch_size=vae_batch_size,
-                validation_data=(X_Test_Unsup, X_Test_Unsup),
+                validation_data=(vae_testX, vae_testY),
                 callbacks=[get_tb_cb('vae_encoder_' + vae_name)])
 
             # build some new layers and assign the trained weights but freeze them??
@@ -647,47 +673,72 @@ def vae(x, input_dim, pretrain, trainable):
 # AutoEncoder
 
 def create_auto_encoder(start_layer, encoding_dim, x_shape, name_suffix, trainable):
-    x = Dense(256, activation='relu', name='encoder_{0}_L_1'.format(name_suffix), trainable=trainable)(start_layer)
-    x = Dense(128, activation='relu', name='encoder_{0}_L_2'.format(name_suffix), trainable=trainable)(x)
+    # start_layer = Dropout(0.15)(start_layer)
+    batch_sample_mode = 2
+    # start_layer = BatchNormalization(mode=batch_sample_mode, name='encoder_{0}_L_start_BatchNorm'.format(name_suffix))(start_layer)
+    x = Dense(100, activation='relu', name='encoder_{0}_L_1'.format(name_suffix), trainable=trainable)(start_layer)
+    # x = Dense(256, activation='relu', name='encoder_{0}_L_2'.format(name_suffix), trainable=trainable)(x)
     encoded = Dense(encoding_dim, activation='relu', name='encoder_{0}_L_3_encode'.format(name_suffix), trainable=trainable)(x)
-    x = Dense(128, activation='relu', name='decoder_{0}_L_1'.format(name_suffix), trainable=trainable)(encoded)
-    x = Dense(256, activation='relu', name='decoder_{0}_L_2'.format(name_suffix), trainable=trainable)(x)
+    # x = Dense(256, activation='relu', name='decoder_{0}_L_1'.format(name_suffix), trainable=trainable)(encoded)
+    x = Dense(100, activation='relu', name='decoder_{0}_L_2'.format(name_suffix), trainable=trainable)(encoded)
     decoded = Dense(x_shape, activation='relu', name='decoder_{0}_L_3_decode'.format(name_suffix), trainable=trainable)(x)
     return encoded, decoded
 
 
-def auto_encoder(inputs, pretrain, trainable):
+def auto_encoder(inputs, input_dim, pretrain, trainable):
     # Build encoder and decoder
-    encoding_dim = 100
-    num_layers = 5
+    encoding_dim = 50
+    num_layers = 6
     trained_layers = inputs
 
     for ae in range(num_layers):
         ae_name = 'ae_{0}'.format(ae)
 
-        encoded, decoded = create_auto_encoder(trained_layers, encoding_dim - (num_layers * 10), input_dim, ae_name, trainable) #- (num_layers * 10)
+        encoded, decoded = create_auto_encoder(trained_layers, encoding_dim, input_dim, ae_name, trainable) #- (num_layers * 10)
+
+        outputs = decoded
+        loss = 'binary_crossentropy'
+        loss_weights=[1.]
+        ae_trainX = X_Train_Unsup
+        ae_trainY = X_Train_Unsup
+        ae_testX = X_Test_Unsup
+        ae_testY = X_Test_Unsup
+        nb_epoch = 50
+        if ae == -1: #NO OP for now...
+            aux_out = Dense(2, activation='softmax', name='aux_out_{0}_L_1'.format(ae_name))(decoded)
+            outputs = [decoded, aux_out]
+            loss = ['binary_crossentropy', 'categorical_crossentropy']
+            loss_weights=[0.5, 0.2]
+            ae_trainX = X_train
+            ae_trainY = [X_train, Y_train_OH]
+            ae_testX = X_test
+            ae_testY = [X_test, Y_test_OH]
+            nb_epoch = 150
+
         encoder_model = Model(input=inputs, output=encoded)
-        autoencoder_model = Model(input=inputs, output=decoded)
+        autoencoder_model = Model(input=inputs, output=outputs)
         print('encoder_model.summary: ', encoder_model.summary())
         print('autoencoder_model.summary: ', autoencoder_model.summary())
         trained_layers = encoded
         weights_file = dataBasePath + data_set_name + '/vanilla_encoder' + ae_name + '_weights.keras'
 
         if(pretrain==True):
-            autoencoder_model.compile(loss='mse', optimizer='rmsprop')
-            autoencoder_model.fit(X_train, X_train, validation_data=(X_test, X_test), batch_size=batch_size, nb_epoch=100, verbose=2, callbacks=[get_tb_cb('vanilla_encoder_' + ae_name)]) #, validation_data=(X_test, X_test)
+            nadam = Nadam(lr=0.0002, beta_1=0.9, beta_2=0.999, epsilon=1e-08, schedule_decay=0.004)
+            adadelta = Adadelta(lr=1.0, rho=0.95, epsilon=1e-08, decay=0.0)
+            autoencoder_model.compile(loss=loss, optimizer=adadelta)
+            autoencoder_model.fit(ae_trainX, ae_trainY, validation_data=(ae_testX, ae_testY), batch_size=batch_size, nb_epoch=nb_epoch, verbose=2, callbacks=[get_tb_cb('vanilla_encoder_' + ae_name)]) #, validation_data=(X_test, X_test)
 
             # trained_layers.trainable = False
 
-            yaml_string = encoder_model.to_yaml()
+            # yaml_string = encoder_model.to_yaml()
 
-            f = open(dataBasePath + data_set_name +'/vanilla_encoder_arch' + ae_name + '.yaml', 'w')
-            f.write(yaml_string)
-            f.close()
+            # f = open(dataBasePath + data_set_name +'/vanilla_encoder_arch' + ae_name + '.yaml', 'w')
+            # f.write(yaml_string)
+            # f.close()
 
             encoder_model.save_weights(weights_file)
 
-            plot_outcomes(autoencoder_model, 'ae' + vae_name, X_test, X_train, Y_test, Y_train)
+            # plot_outcomes(autoencoder_model, 'ae' + vae_name, X_test, X_train, Y_test, Y_train)
 
 
     return weights_file, encoded
@@ -701,13 +752,15 @@ def run():
     inputs = Input(shape=(input_dim,))
     trainable=True
 
-    weights_file, encoded =  vae(inputs, input_dim, pretrain, trainable) #vae(inputs)  #auto_encoder(inputs)
+    # weights_file, encoded =  vae(inputs, input_dim, pretrain, trainable) #vae(inputs)  #auto_encoder(inputs)
+    weights_file, encoded = auto_encoder(inputs, input_dim,  pretrain, trainable)
 
     # encoded = BatchNormalization(mode=batch_sample_mode)(encoded)
     # x = Dropout(0.5)(encoded)
     out = Dense(2, activation='softmax')(encoded)
     sgd = SGD(lr=0.01, decay=1e-15, nesterov=True )
     nadamft = Nadam(lr=0.002, beta_1=0.9, beta_2=0.999, epsilon=1e-08, schedule_decay=0.004)
+    adadeltaft = Adadelta(lr=1.0, rho=0.95, epsilon=1e-08, decay=0.0)
 
     finetune_model = Model(input=inputs, output=out)
 
@@ -725,8 +778,8 @@ def run():
 
     run_model = 'vae_ae_finetune' #'vanilla_ae_finetune' # 'vae_ae_finetune'
 
-    finetune_model.compile(loss='categorical_crossentropy', optimizer=sgd)
-    finetune_model.fit(X_train, Y_train_OH, validation_data=(X_test, Y_test_OH), batch_size=batch_size, nb_epoch=700, verbose=2, callbacks=[chk, get_tb_cb(run_model)])
+    finetune_model.compile(loss='categorical_crossentropy', optimizer=adadeltaft)
+    finetune_model.fit(X_train, Y_train_OH, validation_data=(X_test, Y_test_OH), batch_size=batch_size, nb_epoch=100, verbose=2, callbacks=[chk, get_tb_cb(run_model)])
 
 # , validation_data=(X_test, Y_test_OH)
 # model = Sequential()
